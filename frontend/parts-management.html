@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Spare Parts Management</title>
+
+    <link rel="stylesheet"
+          href="css/parts-management.css">
+
+</head>
+
+<body>
+    <div class="machine-container">
+        <aside class="machine-sidebar">
+
+    <div class="logo-section">
+
+        <img src="images/bsp-logo.png"
+             class="logo">
+
+        <h2>
+
+            Asset Management System
+
+        </h2>
+
+    </div>
+
+    <ul>
+
+        <li>
+
+            <a href="dashboard.html">
+
+                Dashboard
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="machine-register.html">
+
+                Machine Register
+
+            </a>
+
+        </li>
+
+        <li class="active">
+
+            <a href="parts-management.html">
+
+                Parts Management
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="#">
+
+                Maintenance
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="#">
+
+                Reports
+
+            </a>
+
+        </li>
+
+        <li>
+
+            <a href="login.html">
+
+                Logout
+
+            </a>
+
+        </li>
+
+    </ul>
+
+</aside>
+<main class="parts-main">
+    <header class="parts-header">
+
+    <div>
+
+        <h1>Spare Parts Management</h1>
+
+        <p>
+            Manage spare parts inventory and stock availability across the plant.
+        </p>
+
+    </div>
+
+    <div class="officer-box">
+
+        <span class="officer-icon">👤</span>
+
+        <div>
+
+            <h3>Officer</h3>
+
+            <p id="currentDate"></p>
+
+            <p id="currentTime"></p>
+
+        </div>
+
+    </div>
+
+</header>
+
+<section class="parts-toolbar">
+
+    <button class="add-part-btn">
+        + Add Part
+    </button>
+
+    <input
+        type="text"
+        class="parts-search"
+        placeholder="Search Part">
+
+    <select class="parts-filter">
+
+        <option>Category</option>
+
+        <option>Mechanical</option>
+
+        <option>Electrical</option>
+
+        <option>Hydraulic</option>
+
+        <option>Pneumatic</option>
+
+    </select>
+
+    <select class="parts-filter">
+
+        <option>Stock Status</option>
+
+        <option>In Stock</option>
+
+        <option>Low Stock</option>
+
+        <option>Out of Stock</option>
+
+    </select>
+
+</section>
+
+<section class="parts-summary">
+
+    <div class="parts-card">
+
+        <h2>320</h2>
+
+        <p>Total Parts</p>
+
+    </div>
+
+    <div class="parts-card">
+
+        <h2>280</h2>
+
+        <p>In Stock</p>
+
+    </div>
+
+    <div class="parts-card">
+
+        <h2>30</h2>
+
+        <p>Low Stock</p>
+
+    </div>
+
+    <div class="parts-card">
+
+        <h2>10</h2>
+
+        <p>Out of Stock</p>
+
+    </div>
+
+</section>
+<section class="parts-table-section">
+
+    <div class="table-heading">
+
+        <h2>Parts Inventory</h2>
+
+    </div>
+
+    <table class="parts-table">
+
+        <thead>
+
+            <tr>
+
+                <th>Part ID</th>
+                <th>Part Name</th>
+                <th>Machine</th>
+                <th>Category</th>
+                <th>Quantity</th>
+                <th>Supplier</th>
+                <th>Status</th>
+                <th>Actions</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            <tr>
+
+                <td>P001</td>
+                <td>Bearing</td>
+                <td>Lathe Machine</td>
+                <td>Mechanical</td>
+                <td>25</td>
+                <td>SKF</td>
+
+                <td>
+                    <span class="stock-good">
+                        In Stock
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        Edit
+                    </button>
+
+                    <button class="delete-btn">
+                        Delete
+                    </button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>P002</td>
+                <td>Hydraulic Pump</td>
+                <td>Press Machine</td>
+                <td>Hydraulic</td>
+                <td>3</td>
+                <td>Bosch</td>
+
+                <td>
+                    <span class="stock-low">
+                        Low Stock
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        Edit
+                    </button>
+
+                    <button class="delete-btn">
+                        Delete
+                    </button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>P003</td>
+                <td>Motor Belt</td>
+                <td>Conveyor</td>
+                <td>Mechanical</td>
+                <td>0</td>
+                <td>Gates</td>
+
+                <td>
+                    <span class="stock-out">
+                        Out of Stock
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        Edit
+                    </button>
+
+                    <button class="delete-btn">
+                        Delete
+                    </button>
+
+                </td>
+
+            </tr>
+
+        </tbody>
+
+    </table>
+
+</section>
+<section class="parts-pagination">
+
+    <p>Showing 1–10 of 320 Parts</p>
+
+    <div>
+
+        <button>Previous</button>
+
+        <button class="active-page">1</button>
+
+        <button>2</button>
+
+        <button>Next</button>
+
+    </div>
+
+</section>
+</main>
+
+
+
+</body>
+
+</html>

@@ -1,20 +1,190 @@
-.toolbar{
+*{
+
+    margin:0;
+
+    padding:0;
+
+    box-sizing:border-box;
+
+    font-family:Arial, Helvetica, sans-serif;
+
+}
+
+body{
+
+    background:#F3F6FB;
+
+}
+
+.machine-container{
+
+    display:flex;
+
+}
+
+.machine-sidebar{
+
+    width:250px;
+
+    min-height:100vh;
+
+    background:#1F3B63;
+
+    color:white;
+
+}
+
+.logo-section{
+
+    text-align:center;
+
+    padding:30px 20px;
+
+}
+
+.logo{
+
+    width:90px;
+
+}
+
+.logo-section h2{
+
+    margin-top:20px;
+
+    font-size:17px;
+
+    line-height:32px;
+
+}
+
+.machine-sidebar ul{
+
+    list-style:none;
+
+    margin-top:20px;
+
+}
+
+.machine-sidebar li{
+
+    padding:18px 25px;
+
+}
+
+.machine-sidebar a{
+
+    color:white;
+
+    text-decoration:none;
+
+    font-size:17px;
+
+}
+
+.machine-sidebar .active{
+
+    background:#2563EB;
+
+    margin:0 15px;
+
+    border-radius:8px;
+
+}
+
+.machine-main{
+
+    flex:1;
+
+    padding:35px;
+
+    background:#F5F7FB;
+
+    min-height:100vh;
+
+}
+
+.machine-header{
 
     display:flex;
 
     justify-content:space-between;
 
+    align-items:flex-start;
+
+    margin-bottom:35px;
+
+}
+
+.machine-header-left h1{
+
+    font-size:42px;
+
+    color:#1F2937;
+
+    margin-bottom:8px;
+
+}
+
+.machine-header-left p{
+
+    color:#6B7280;
+
+    font-size:18px;
+
+}
+
+.officer-box{
+
+    display:flex;
+
     align-items:center;
 
-    gap:18px;
+    gap:15px;
 
-    margin:30px 0;
+}
+
+.officer-icon{
+
+    font-size:34px;
+
+}
+
+.officer-box h3{
+
+    font-size:20px;
+
+    color:#1F2937;
+
+    margin-bottom:5px;
+
+}
+
+.officer-box p{
+
+    color:#6B7280;
+
+    font-size:15px;
+
+    line-height:24px;
+
+}
+
+.machine-toolbar{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:20px;
+
+    margin-bottom:35px;
 
     flex-wrap:wrap;
 
 }
 
-.add-machine-btn{
+.machine-add-btn{
 
     background:#2563EB;
 
@@ -30,19 +200,19 @@
 
     cursor:pointer;
 
-    transition:0.3s;
-
 }
 
-.add-machine-btn:hover{
+.machine-add-btn:hover{
 
     background:#1D4ED8;
 
 }
 
-.search-machine{
+.machine-search{
 
-    width:280px;
+    flex:1;
+
+    min-width:260px;
 
     padding:12px;
 
@@ -54,7 +224,7 @@
 
 }
 
-.filter-box{
+.machine-filter{
 
     width:180px;
 
@@ -64,13 +234,13 @@
 
     border-radius:8px;
 
-    font-size:15px;
-
     background:white;
+
+    font-size:15px;
 
 }
 
-.machine-cards{
+.machine-summary{
 
     display:grid;
 
@@ -82,7 +252,7 @@
 
 }
 
-.machine-card{
+.machine-summary-card{
 
     background:white;
 
@@ -90,13 +260,35 @@
 
     padding:22px;
 
-    box-shadow:0 4px 10px rgba(0,0,0,0.08);
-
-    border-top:4px solid #2563EB;
+    box-shadow:0 5px 12px rgba(0,0,0,.08);
 
 }
 
-.machine-card h2{
+.machine-summary-card:nth-child(1){
+
+    border-top:5px solid #2563EB;
+
+}
+
+.machine-summary-card:nth-child(2){
+
+    border-top:5px solid #10B981;
+
+}
+
+.machine-summary-card:nth-child(3){
+
+    border-top:5px solid #F59E0B;
+
+}
+
+.machine-summary-card:nth-child(4){
+
+    border-top:5px solid #EF4444;
+
+}
+
+.machine-summary-card h2{
 
     font-size:34px;
 
@@ -106,33 +298,33 @@
 
 }
 
-.machine-card p{
-
-    font-size:16px;
+.machine-summary-card p{
 
     color:#555;
 
+    font-size:16px;
+
 }
 
-.machine-table-section{
+.machine-list-section{
 
     background:white;
 
-    border-radius:12px;
-
     padding:25px;
 
-    box-shadow:0 4px 12px rgba(0,0,0,.08);
+    border-radius:12px;
+
+    box-shadow:0 5px 12px rgba(0,0,0,0.08);
 
 }
 
-.table-title{
+.machine-table-header{
 
     margin-bottom:20px;
 
 }
 
-.table-title h2{
+.machine-table-header h2{
 
     font-size:28px;
 
@@ -176,7 +368,7 @@
 
 }
 
-.running{
+.status-running{
 
     background:#DCFCE7;
 
@@ -192,7 +384,7 @@
 
 }
 
-.repair{
+.status-repair{
 
     background:#FEE2E2;
 
@@ -208,7 +400,7 @@
 
 }
 
-.inactive{
+.status-inactive{
 
     background:#E5E7EB;
 
@@ -224,7 +416,7 @@
 
 }
 
-.edit-btn{
+.machine-edit-btn{
 
     background:#2563EB;
 
@@ -242,13 +434,13 @@
 
 }
 
-.edit-btn:hover{
+.machine-edit-btn:hover{
 
     background:#1D4ED8;
 
 }
 
-.delete-btn{
+.machine-delete-btn{
 
     background:#DC2626;
 
@@ -264,8 +456,42 @@
 
 }
 
-.delete-btn:hover{
+.machine-delete-btn:hover{
 
     background:#B91C1C;
+
+}
+
+.machine-pagination{
+
+    margin-top:25px;
+
+    display:flex;
+
+    justify-content:flex-end;
+
+    gap:10px;
+
+}
+
+.machine-pagination button{
+
+    padding:10px 16px;
+
+    border:none;
+
+    background:#E5E7EB;
+
+    border-radius:6px;
+
+    cursor:pointer;
+
+}
+
+.active-page{
+
+    background:#2563EB !important;
+
+    color:white;
 
 }
