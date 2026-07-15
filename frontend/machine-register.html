@@ -1,119 +1,374 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Machine Register</title>
 
     <link rel="stylesheet" href="css/style.css">
+
 </head>
+
 <body>
-    <div class="card blue-card">
-    <div class="card orange-card">
-    <div class="card green-card">
-    <div class="card red-card">
-    </div>    
-    </div>    
-    </div>    
-    </div>
-        <div class="sidebar">
-            <h2> Asset Management System</h2>
-        <ul>
-            <li>Dashboard</li>
-            <li>Machine Register</li>
-            <li>Parts Management</li>
-            <li>Maintenance</li>
-            <li>Reports</li>
-            <li>Logout</li>
+    <aside class="sidebar">
+
+        <div class="logo-section">
+
+            <img src="images/bsp-logo.png" alt="bsp-logo"class="bsp-logo">
+
+            <h2>Asset Management System</h2>
+
+        </div>
+
+        <ul class="menu">
+
+            <li>
+                <a href="dashboard.html">Dashboard</a>
+            </li>
+
+            <li class="active">
+                <a href="machine-register.html">Machine Register</a>
+            </li>
+
+            <li>
+                <a href="#">Parts Management</a>
+            </li>
+
+            <li>
+                <a href="#">Maintenance</a>
+            </li>
+
+            <li>
+                <a href="#">Reports</a>
+            </li>
+
+            <li>
+                <a href="login.html">Logout</a>
+            </li>
+
         </ul>
 
-        </div>
-        <div class="main-content">
-            <div class ="header">
-                <div class="header">
+    </aside>
+    <main class="main-content">
 
-    <div class="header-left">
-        <h1>Dashboard</h1>
-        <p>Monitor machine assets and maintenance activities.</p>
+        <header class="header">
+
+<section class="toolbar">
+
+    <button class="add-machine-btn">
+
+        + Add Machine
+
+    </button>
+
+    <input
+        type="text"
+        class="search-machine"
+        placeholder="Search Machine">
+
+    <select class="filter-box">
+
+        <option>Department</option>
+
+        <option>SMS-II</option>
+
+        <option>Blast Furnace</option>
+
+        <option>Steel Melting Shop</option>
+
+        <option>Rolling Mill</option>
+
+        <option>Coke Oven</option>
+
+    </select>
+
+    <select class="filter-box">
+
+        <option>Status</option>
+
+        <option>Running</option>
+
+        <option>Under Repair</option>
+
+        <option>Inactive</option>
+
+    </select>
+
+</section>
+
+<section class="machine-cards">
+
+    <div class="machine-card">
+
+        <h2>150</h2>
+
+        <p>Total Assets</p>
+
     </div>
 
-    <div class="header-right">
-        <h3>👤 Officer</h3>
-        <p>13 July 2026</p>
+    <div class="machine-card">
+
+        <h2>132</h2>
+
+        <p>Running</p>
+
     </div>
 
-</div>
+    <div class="machine-card">
+
+        <h2>12</h2>
+
+        <p>Under Repair</p>
+
     </div>
 
-</div>
-            </div>    
-            <div class="cards">
-                <div class="card">
-                    <h2>150</h2>
-                    <p>Total Machines</p>
-                </div>
-                <div class="card">
-                    <h2>12</h2>
-                    <p>Under Repair</p>
-                </div>
-                <div class="card">
-                    <h2>18</h2>
-                    <p>Due Maintenance</p>
-                </div>
-                <div class="card">
-                    <h2>5</h2>
-                    <p>Overdue</p>
-                </div>
+    <div class="machine-card">
+
+        <h2>06</h2>
+
+        <p>Inactive</p>
+
+    </div>
+
+</section>
+<!-- ================= MACHINE LIST ================= -->
+
+<section class="machine-table-section">
+
+    <div class="table-title">
+
+        <h2>Machine List</h2>
+
+    </div>
+
+    <table class="machine-table">
+
+        <thead>
+
+            <tr>
+
+                <th>Machine ID</th>
+
+                <th>Machine Name</th>
+
+                <th>Department</th>
+
+                <th>Location</th>
+
+                <th>Manufacturer</th>
+
+                <th>Status</th>
+
+                <th>Last Service</th>
+
+                <th>Actions</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            <tr>
+
+                <td>M001</td>
+
+                <td>Lathe Machine</td>
+
+                <td>SMS-II</td>
+
+                <td>Bay-01</td>
+
+                <td>HMT</td>
+
+                <td><span class="running">Running</span></td>
+
+                <td>12-Jul-2026</td>
+
+                <td>
+
+                    <button class="edit-btn">Edit</button>
+
+                    <button class="delete-btn">Delete</button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>M002</td>
+
+                <td>Blast Furnace</td>
+
+                <td>Blast Furnace</td>
+
+                <td>Bay-03</td>
+
+                <td>SAIL</td>
+
+                <td><span class="repair">Under Repair</span></td>
+
+                <td>03-Jul-2026</td>
+
+                <td>
+
+                    <button class="edit-btn">Edit</button>
+
+                    <button class="delete-btn">Delete</button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>M003</td>
+
+                <td>Overhead Crane</td>
+
+                <td>Steel Melting Shop</td>
+
+                <td>Bay-07</td>
+
+                <td>BHEL</td>
+
+                <td><span class="inactive">Inactive</span></td>
+
+                <td>18-Jun-2026</td>
+
+                <td>
+
+                    <button class="edit-btn">Edit</button>
+
+                    <button class="delete-btn">Delete</button>
+
+                </td>
+
+            </tr>
+
+        </tbody>
+
+    </table>
+
+</section>
+            <div class="header-left">
+
+                <h1>Machine Register</h1>
+
+                <p>Manage all machine assets across the plant.</p>
+
             </div>
-            <div class="table-section">
-                <h2>Recent Maintenance Records</h2>
-                <table>
-                    <table>
 
-<tr>
-    <th>Machine ID</th>
-    <th>Machine Name</th>
-    <th>Engineer</th>
-    <th>Status</th>
-    <th>Next Due Date</th>
-</tr>
+            <div class="header-right">
 
-<tr>
-    <td>M001</td>
-    <td>Lathe Machine</td>
-    <td>Rajesh</td>
-    <td class="completed">Completed</td>
-    <td>20-07-2026</td>
-</tr>
+                <div class="officer">
 
-<tr>
-    <td>M002</td>
-    <td>Furnace</td>
-    <td>Amit</td>
-    <td class="pending">Pending</td>
-    <td>22-07-2026</td>
-</tr>
+                    <span class="user-icon:>👤</span>
+                    
+                    <div>
+                        <h3>Officer</h3>
 
-<tr>
-    <td>M003</td>
-    <td>Crane</td>
-    <td>Mohan</td>
-    <td class="completed">Completed</td>
-    <td>25-07-2026</td>
-</tr>
-<div class="search-box">
+                        <p id="currentDate"></p>
 
-<input type="text" placeholder="Search Machine...">
+                        <p id="currentTime"></p>
 
-</div>
-</table>
-                
-            </div>    
-            </div>
+                    </div>
+
+                </div>
+
             </div>
 
-        </div>
+        </header>
+
+<section class="cards">
+
+    <div class="card">
+        <h2>150</h2>
+        <p>Total Machines</p>
     </div>
+
+    <div class="card">
+        <h2>12</h2>
+        <p>Under Repair</p>
+    </div>
+
+    <div class="card">
+        <h2>18</h2>
+        <p>Due Maintenance</p>
+    </div>
+
+    <div class="card">
+        <h2>5</h2>
+        <p>Overdue</p>
+    </div>
+
+</section>
+
+<section class="table-section">
+
+    <div class="table-header">
+
+        <h2>Recent Maintenance Records</h2>
+
+        <input type="text" placeholder="Search Machine">
+
+    </div>
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th>Machine ID</th>
+                <th>Machine Name</th>
+                <th>Engineer</th>
+                <th>Status</th>
+                <th>Next Due Date</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            <tr>
+                <td>M001</td>
+                <td>Lathe Machine</td>
+                <td>Rahul</td>
+                <td><span class="completed">Completed</span></td>
+                <td>20-07-2026</td>
+            </tr>
+
+            <tr>
+                <td>M002</td>
+                <td>Blast Furnace</td>
+                <td>Amit</td>
+                <td><span class ="pending">Pending</span></td>
+                <td>22-07-2026</td>
+            </tr>
+
+            <tr>
+                <td>M003</td>
+                <td>Overhead Crane</td>
+                <td>Priya</td>
+                <td><span class="completed">Completed</span></td>
+                <td>25-07-2026</td>
+            </tr>
+
+        </tbody>
+
+    </table>
+
+</section>
+
+</main>
 
 </body>
+
 </html>
