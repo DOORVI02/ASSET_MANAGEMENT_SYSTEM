@@ -118,30 +118,57 @@ body{
     margin: 2px 0;
 }
 
-.dashboard-cards{
+.summary-cards{
     display:grid;
     grid-template-columns:repeat(4,1fr);
     gap:20px;
     margin-bottom:30px;
 }
 
-.dashboard-card{
+.card{
     background:white;
-    padding:20px;
+    padding:25px;
     border-radius:12px;
-    box-shadow:0 5px 12px rgba(0,0,0,.08);
+    text-align:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.08);
+    transition:.3s;
     border-top:5px solid #2563EB;
 }
 
-.dashboard-card h2{
-    font-size:32px;
+.card:hover{
+
+    transform:translateY(-5px);
+}
+
+.card h2{
+    font-size:34px;
     color:#2563EB;
     margin-bottom:10px;
 }
 
-.dashboard-card p{
+.card p{
     color:#555;
     font-size:16px;
+}
+
+.total{
+    
+    border-color:#2563EB;
+}
+
+.repair{
+
+    border-color:#ef4444
+}
+
+.maintenance{
+
+    border-color:#F59E0B;
+}
+
+.overdue{
+
+    border-color:#22C55E;
 }
 
 .table-section{
@@ -190,21 +217,7 @@ td{
 tr:hover{
     background:#f8f9fa;
 }
-.card:nth-child(1){
-border-top:5px solid #2563EB;
-}
 
-.card:nth-child(2){
-border-top:5px solid #EF4444;
-}
-
-.card:nth-child(3){
-border-top:5px solid #F59E0B;
-}
-
-.card:nth-child(4){
-border-top:5px solid #10B981;
-}
 .completed{
     background:#DCFCE7;
     color:#15803D;

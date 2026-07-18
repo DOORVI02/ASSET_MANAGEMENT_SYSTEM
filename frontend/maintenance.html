@@ -14,8 +14,6 @@
 
 <body>
 
-    <!-- ===================== SIDEBAR ===================== -->
-
     <div class="sidebar">
 
         <div class="logo">
@@ -38,13 +36,11 @@
 
             <li><a href="reports.html">Reports</a></li>
 
-            <li><a href="login.html">Logout</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
 
         </ul>
 
     </div>
-
-    <!-- ===================== MAIN CONTENT ===================== -->
 
     <div class="main-content">
 
@@ -60,24 +56,7 @@
 
             </div>
 
-            <div class="officer-box">
-
-                <i class="fas fa-user"></i>
-
-                <div>
-
-                    <h3>Officer</h3>
-
-                    <p id="current-date"></p>
-
-                    <p id="current-time"></p>
-
-                </div>
-
-            </div>
-
         </div>
-<!-- ================= MAIN LAYOUT ================= -->
 
 <div class="maintenance-layout">
 
@@ -110,7 +89,6 @@
             </div>
 
         </div>
-        <!-- ================= TOOLBAR ================= -->
 
 <div class="toolbar">
 
@@ -138,8 +116,6 @@
     </select>
 
 </div>
-
-<!-- ================= SCHEDULE MAINTENANCE ================= -->
 
 <div class="schedule-box">
 
@@ -219,7 +195,6 @@
 
 </div>
 
-<!-- ================= MAINTENANCE HISTORY ================= -->
 
 <div class="history-box">
 
@@ -357,8 +332,6 @@
 
     </div>
 
-    <!-- RIGHT SECTION -->
-
     <div class="right-section">
 
         <div class="alert-panel">
@@ -392,33 +365,6 @@
 </div>
 
     </div>
-
-    <script>
-
-        function updateDateTime() {
-
-            const now = new Date();
-
-            document.getElementById("current-date").innerHTML =
-                now.toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: 'long',
-                    year: 'numeric'
-                });
-
-            document.getElementById("current-time").innerHTML =
-                now.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-
-        }
-
-        updateDateTime();
-
-        setInterval(updateDateTime, 1000);
-
-    </script>
 
 </body>
 
