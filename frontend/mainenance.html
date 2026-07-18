@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance Management</title>
+
+    <link rel="stylesheet" href="css/maintenance.css">
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+
+<body>
+
+    <!-- ===================== SIDEBAR ===================== -->
+
+    <div class="sidebar">
+
+        <div class="logo">
+
+            <img src="images/bsp-logo.png" alt="BSP Logo">
+
+            <h2>Asset Management System</h2>
+
+        </div>
+
+        <ul>
+
+            <li><a href="dashboard.html">Dashboard</a></li>
+
+            <li><a href="machine-register.html">Machine Register</a></li>
+
+            <li><a href="parts-management.html">Parts Management</a></li>
+
+            <li><a href="maintenance.html" class="active">Maintenance</a></li>
+
+            <li><a href="reports.html">Reports</a></li>
+
+            <li><a href="login.html">Logout</a></li>
+
+        </ul>
+
+    </div>
+
+    <!-- ===================== MAIN CONTENT ===================== -->
+
+    <div class="main-content">
+
+        <!-- Header -->
+
+        <div class="top-header">
+
+            <div class="page-title">
+
+                <h1>Maintenance Management</h1>
+
+                <p>Track preventive maintenance and repair activities.</p>
+
+            </div>
+
+            <div class="officer-box">
+
+                <i class="fas fa-user"></i>
+
+                <div>
+
+                    <h3>Officer</h3>
+
+                    <p id="current-date"></p>
+
+                    <p id="current-time"></p>
+
+                </div>
+
+            </div>
+
+        </div>
+<!-- ================= MAIN LAYOUT ================= -->
+
+<div class="maintenance-layout">
+
+    <!-- LEFT SECTION -->
+
+    <div class="left-section">
+
+        <!-- Summary Cards -->
+
+        <div class="summary-cards">
+
+            <div class="card scheduled">
+                <h2>22</h2>
+                <p>Scheduled</p>
+            </div>
+
+            <div class="card preventive">
+                <h2>18</h2>
+                <p>Preventive</p>
+            </div>
+
+            <div class="card breakdown">
+                <h2>07</h2>
+                <p>Breakdown</p>
+            </div>
+
+            <div class="card completed">
+                <h2>51</h2>
+                <p>Completed</p>
+            </div>
+
+        </div>
+        <!-- ================= TOOLBAR ================= -->
+
+<div class="toolbar">
+
+    <button class="log-btn">
+        <i class="fas fa-plus"></i>
+        Log Repair
+    </button>
+
+    <input type="text" placeholder="Search Machine">
+
+    <select>
+        <option>Machine Type</option>
+        <option>CNC Machine</option>
+        <option>Lathe Machine</option>
+        <option>Hydraulic Press</option>
+        <option>Rolling Mill</option>
+    </select>
+
+    <select>
+        <option>Status</option>
+        <option>Scheduled</option>
+        <option>Preventive</option>
+        <option>Breakdown</option>
+        <option>Completed</option>
+    </select>
+
+</div>
+
+<!-- ================= SCHEDULE MAINTENANCE ================= -->
+
+<div class="schedule-box">
+
+    <h2>Schedule Maintenance</h2>
+
+    <div class="form-grid">
+
+        <div class="form-group">
+            <label>Machine Name</label>
+            <select>
+                <option>Select Machine</option>
+                <option>Hydraulic Press</option>
+                <option>Rolling Mill</option>
+                <option>Lathe Machine</option>
+                <option>CNC Machine</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Maintenance Type</label>
+            <select>
+                <option>Preventive</option>
+                <option>Breakdown</option>
+                <option>Inspection</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Assigned Engineer</label>
+            <input type="text" placeholder="Enter Engineer Name">
+        </div>
+
+        <div class="form-group">
+            <label>Scheduled Date</label>
+            <input type="date">
+        </div>
+
+        <div class="form-group">
+            <label>Next Due Date</label>
+            <input type="date">
+        </div>
+
+        <div class="form-group">
+            <label>Priority</label>
+            <select>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+            </select>
+        </div>
+
+    </div>
+
+    <div class="form-group">
+
+        <label>Work Description</label>
+
+        <textarea rows="4" placeholder="Enter maintenance work details"></textarea>
+
+    </div>
+
+    <div class="form-group">
+
+        <label>Remarks</label>
+
+        <textarea rows="3" placeholder="Additional remarks"></textarea>
+
+    </div>
+
+    <div class="form-buttons">
+
+        <button class="save-btn">Save Maintenance</button>
+
+        <button class="reset-btn">Reset</button>
+
+    </div>
+
+</div>
+
+<!-- ================= MAINTENANCE HISTORY ================= -->
+
+<div class="history-box">
+
+    <div class="history-header">
+
+        <h2>Maintenance History</h2>
+
+        <button class="view-btn">View All</button>
+
+    </div>
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th>Machine</th>
+                <th>Type</th>
+                <th>Engineer</th>
+                <th>Last Date</th>
+                <th>Next Due</th>
+                <th>Status</th>
+                <th>Actions</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            <tr>
+
+                <td>Hydraulic Press</td>
+                <td>Preventive</td>
+                <td>Rahul Sharma</td>
+                <td>10 Jul 2026</td>
+                <td>10 Aug 2026</td>
+
+                <td>
+                    <span class="status completed-status">
+                        Completed
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        <i class="fas fa-edit"></i>
+                    </button>
+
+                    <button class="delete-btn">
+                        <i class="fas fa-trash"></i>
+                    </button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>Rolling Mill</td>
+                <td>Breakdown</td>
+                <td>Amit Verma</td>
+                <td>15 Jul 2026</td>
+                <td>20 Jul 2026</td>
+
+                <td>
+                    <span class="status pending-status">
+                        Pending
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        <i class="fas fa-edit"></i>
+                    </button>
+
+                    <button class="delete-btn">
+                        <i class="fas fa-trash"></i>
+                    </button>
+
+                </td>
+
+            </tr>
+
+            <tr>
+
+                <td>CNC Machine</td>
+                <td>Inspection</td>
+                <td>Rakesh Singh</td>
+                <td>12 Jul 2026</td>
+                <td>25 Jul 2026</td>
+
+                <td>
+                    <span class="status overdue-status">
+                        Overdue
+                    </span>
+                </td>
+
+                <td>
+
+                    <button class="edit-btn">
+                        <i class="fas fa-edit"></i>
+                    </button>
+
+                    <button class="delete-btn">
+                        <i class="fas fa-trash"></i>
+                    </button>
+
+                </td>
+
+            </tr>
+
+        </tbody>
+
+    </table>
+
+    <div class="pagination">
+
+        <button>Previous</button>
+
+        <button class="active-page">1</button>
+
+        <button>2</button>
+
+        <button>3</button>
+
+        <button>Next</button>
+
+    </div>
+
+</div>
+
+    </div>
+
+    <!-- RIGHT SECTION -->
+
+    <div class="right-section">
+
+        <div class="alert-panel">
+
+            <h2>Upcoming Maintenance Alerts</h2>
+
+            <div class="alert-item high">
+                <h4>Hydraulic Press</h4>
+                <p>Due Tomorrow</p>
+            </div>
+
+            <div class="alert-item medium">
+                <h4>Conveyor Motor</h4>
+                <p>Overdue by 2 Days</p>
+            </div>
+
+            <div class="alert-item low">
+                <h4>Rolling Mill</h4>
+                <p>Due in 5 Days</p>
+            </div>
+
+            <div class="alert-item complete">
+                <h4>Cooling Pump</h4>
+                <p>Maintenance Completed</p>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+    </div>
+
+    <script>
+
+        function updateDateTime() {
+
+            const now = new Date();
+
+            document.getElementById("current-date").innerHTML =
+                now.toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                });
+
+            document.getElementById("current-time").innerHTML =
+                now.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+        }
+
+        updateDateTime();
+
+        setInterval(updateDateTime, 1000);
+
+    </script>
+
+</body>
+
+</html>
