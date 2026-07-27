@@ -69,3 +69,31 @@ bans the Auth identity) — the same soft-delete convention this schema uses eve
 else. Running the script repeatedly accumulates deactivated, access-less
 `phase11-verify-*@example.test` rows; that's expected and harmless, not a leak to chase
 down.
+
+## `verify-embed-scoping.mjs`
+
+Live regression check for a real bug this script's first run caught and the fix it
+confirmed: `parts.ts`/`maintenance.ts`/`repairs.ts` narrow department-scoped list
+queries with `.in('machine.department_id', [...])` — a filter on an embedded (joined)
+resource's column, not a plain own-table column. `verify-data-layer.mjs` never
+exercised this (it only filters `machines` directly), and it turned out PostgREST
+silently ignores a dot-filter on the *default* (left-join) embed — the filter parses
+but never narrows results. The fix, applied to all three modules' `*_SELECT` constants,
+is `machine:machines!inner(...)` — `!inner` turns the embed into a real join condition
+the filter can act on. (RLS itself already prevents cross-department leakage regardless
+of this bug — this is about correctness of further narrowing within a caller's own
+multi-department scope, e.g. an Officer scoped to two departments asking for just one's
+parts, not a security boundary.)
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+node verify-embed-scoping.mjs
+```
+
+**Verified 2026-07-27, 2/2 checks passing** against the fixed code. Same cleanup
+approach as `verify-data-layer.mjs` (deactivate rather than hard-delete the test
+identity); the test machines/parts themselves are hard-deleted since nothing FKs to
+them with `RESTRICT`.

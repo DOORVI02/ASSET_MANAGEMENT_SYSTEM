@@ -26,10 +26,19 @@ import type {
   MutationResult,
 } from '@/lib/types';
 
+/**
+ * `machine:machines!inner(...)`, not the default left-join embed — PostgREST silently
+ * ignores a `.in('machine.department_id', ...)` filter on a left-joined embed (it
+ * parses but never actually narrows results); `!inner` is what makes the filter a real
+ * join condition. Confirmed live: `supabase/scripts/verify-embed-scoping.mjs`. Safe
+ * here because `machine_id`/`plan_id`'s machine reference is never null. The
+ * `technician` embed stays a left join deliberately — `maintenance_plans.technician_id`
+ * is nullable, and this SELECT is shared with plans.
+ */
 const RECORD_SELECT =
-  '*, machine:machines(id, code, name, department_id, is_archived), technician:technicians(name)';
+  '*, machine:machines!inner(id, code, name, department_id, is_archived), technician:technicians(name)';
 const PLAN_SELECT =
-  '*, machine:machines(id, code, name, department_id, is_archived), technician:technicians(name)';
+  '*, machine:machines!inner(id, code, name, department_id, is_archived), technician:technicians(name)';
 
 export interface MaintenanceListFilters {
   status?: MaintenanceStatus;

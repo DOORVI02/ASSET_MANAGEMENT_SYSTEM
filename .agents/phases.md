@@ -1541,6 +1541,19 @@ Carry-over, recorded honestly rather than silently dropped:
   machine is hard-deleted; the test profile/Auth identity are deactivated rather than
   hard-deleted, because `audit_logs`'s append-only trigger genuinely blocks deleting an
   actor once it has any audit rows — this is the schema working as designed, not a gap.
+
+  **Real defect found and fixed by this live testing, 2026-07-27**: this smoke test
+  only ever filtered `machines` directly and never caught it, but
+  `parts.ts`/`maintenance.ts`/`repairs.ts` all narrow department-scoped list queries
+  with `.in('machine.department_id', [...])` — a filter on an embedded (joined)
+  resource's column. A follow-up live check (`supabase/scripts/verify-embed-scoping.mjs`)
+  proved PostgREST silently ignores that filter on the *default* left-join embed — it
+  parses but never actually narrows results (RLS itself still fully prevents
+  cross-department leakage; the bug only affected further narrowing within a caller's
+  own multi-department scope, e.g. an Officer scoped to two departments asking for just
+  one's parts). Fixed by changing every affected `*_SELECT` constant to
+  `machine:machines!inner(...)` — confirmed live, 2/2 checks passing post-fix. See
+  `supabase/scripts/README.md` for detail.
 - [x] Unit-test the mappers and pagination/query-param builders in isolation.
   `src/lib/supabase/mappers.test.ts` and `src/lib/supabase/pagination.test.ts` — full
   frontend suite is 420 passing tests across 31 files (up from 392 before Phase 11),

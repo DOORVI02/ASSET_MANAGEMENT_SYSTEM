@@ -23,7 +23,14 @@ import type {
   RepairSummary,
 } from '@/lib/types';
 
-const REPAIR_SELECT = '*, machine:machines(id, code, name, department_id, is_archived)';
+/**
+ * `!inner`, not the default left-join embed — a `.in('machine.department_id', ...)`
+ * filter on a left-joined embed silently parses but never narrows results in
+ * PostgREST; `!inner` is what turns it into a real join condition. Confirmed live via
+ * `supabase/scripts/verify-embed-scoping.mjs`. Safe here since `machine_id` is never
+ * null.
+ */
+const REPAIR_SELECT = '*, machine:machines!inner(id, code, name, department_id, is_archived)';
 
 export interface RepairListFilters {
   status?: RepairStatus;
