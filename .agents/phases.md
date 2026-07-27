@@ -1460,7 +1460,7 @@ for someone to discover later.
   - Bootstrap script logic (7 checks): department lookup, unknown-code rejection, profile/scope insert, correct read-back.
   - Archived-write rejection (3 checks, added for this exact task row): fitting a part to an archived machine and scheduling maintenance on one both rejected with `403`.
 - [ ] Prove no application route or callable function exposes account creation, role assignment, or user-management capability. Structurally true today (no such route or function exists in `frontend/src` or `supabase/functions`), but not exercised as a specific negative test — carried over, not claimed as verified.
-- [X] Prove role self-escalation, actor spoofing, cross-parent IDOR, and archived writes fail. Self-escalation, cross-parent IDOR, and archived writes are all verified live (above). **Actor spoofing is enforced by constraint** (`part_replacements_insert`'s `performed_by = auth.uid()` check) **but not yet attempted live** — carried over specifically, not folded into "done".
+- [X] Prove role self-escalation, actor spoofing, cross-parent IDOR, and archived writes fail. Self-escalation, cross-parent IDOR, and archived writes are all verified live (above). **Actor spoofing now attempted live too, 2026-07-28**: `supabase/scripts/verify-actor-spoofing.mjs` attempted recording a `part_replacements` row with `performed_by` set to a different real profile's id — rejected by `part_replacements_insert`'s `performed_by = auth.uid()` check — then confirmed the same caller recording themself as the actor succeeds. **2/2 checks passing.**
 - [X] Prove private-function access fails. **Attempted 2026-07-28, found and fixed a
   real gap.** All four `security definer` helper functions were documented as "revoked
   from PUBLIC, granted only to `authenticated`" but a live check against
@@ -1487,7 +1487,12 @@ Carry-over, recorded honestly rather than silently dropped:
 
 - **`disable_signup` is still `false` on the live project.** This is the single most important unresolved item in this phase — it needs a PAT or dashboard action, not more agent-side database work.
 - Frontend still runs on mock auth entirely, by the user's explicit choice.
-- Actor-spoofing and account-creation-surface checks are structurally true (verified by reading the schema/routes) but not yet attempted as live adversarial tests.
+- Actor-spoofing was attempted live 2026-07-28 and passed (2/2, above). The
+  account-creation-surface negative test remains structurally true (no route/function
+  in this codebase creates accounts) but genuinely unattempted as a live test: the
+  natural check — sign up publicly, confirm the account can't act as a real user —
+  can't run here because GoTrue rejects `@example.test` addresses on `signUp()`, the
+  same domain-validation limitation documented for `inviteUserByEmail`.
 - `app_settings` still has no grant or policy at all — deliberately: nothing reads or writes it yet, so there is no real access rule to write, only a guess.
 
 - [ ] **Verification checkpoint:** Bootstrap known-email test accounts out of band, demonstrate Officer/Supervisor and disabled cases, and complete password recovery without any Admin UI/account. **Partially satisfied**: Officer/Supervisor/disabled-account behavior was demonstrated live against real (throwaway) accounts, not a description. Password recovery was **not** completed end-to-end — that needs a real deliverable email address and working SMTP, neither available here safely. This checkpoint stays open until a real roster run happens.

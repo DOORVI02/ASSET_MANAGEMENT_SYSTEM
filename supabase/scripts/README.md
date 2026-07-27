@@ -135,3 +135,31 @@ Cloudinary Edge Functions may add more, if any call Postgres RPCs directly) need
 own explicit `revoke execute ... from anon` — this is a project-wide default privilege,
 not a one-time fix, so it will silently recur for every new function unless each one
 addresses it.
+
+## `verify-actor-spoofing.mjs`
+
+Live check for a Phase 10 gap carried over as "not yet attempted": actor spoofing.
+`part_replacements_insert`'s RLS policy requires `performed_by = auth.uid()` — a caller
+must name themself as the actor, never an arbitrary other profile. Proves it by
+attempting to record a replacement with `performed_by` set to a *different* real
+profile's id (rejected), then confirming the same caller recording themself as the
+actor succeeds.
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+node verify-actor-spoofing.mjs
+```
+
+**Verified 2026-07-28, 2/2 checks passing.**
+
+A second check — whether a public self-signup account (`disable_signup` is still
+`false` on the live project) can act as a real user despite having no `profiles` row —
+was also attempted here but had to be dropped: `supabase.auth.signUp()` against an
+`@example.test` address is rejected by GoTrue's email validation, the same
+domain-validation limitation already documented above for `inviteUserByEmail`. Testing
+it properly needs a real deliverable domain, which this environment deliberately does
+not guess at. `disable_signup` itself remains a genuinely open gap needing a personal
+access token or dashboard action — see `.agents/phases.md` Phase 10.
