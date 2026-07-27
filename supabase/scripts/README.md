@@ -97,3 +97,41 @@ node verify-embed-scoping.mjs
 approach as `verify-data-layer.mjs` (deactivate rather than hard-delete the test
 identity); the test machines/parts themselves are hard-deleted since nothing FKs to
 them with `RESTRICT`.
+
+## `verify-anon-function-lockdown.mjs`
+
+Live regression check for a real security gap found and fixed 2026-07-28:
+`20260727000012_auth_helper_functions.sql` documented `auth_role()`,
+`auth_department_ids()`, `auth_can_see_archived()`, and `entity_department_id()` as
+"revoked from PUBLIC and granted only to authenticated" — but a live check against
+`information_schema.routine_privileges` on the hosted project showed `anon` held
+EXECUTE on all four anyway. Root cause: Supabase provisions new projects with default
+privileges that auto-grant EXECUTE on new *functions* to `anon`/`authenticated` — the
+same platform default the RLS migration already had to work around for *tables*
+("revoke all on all tables in schema public from anon"), just missed for functions.
+`REVOKE ... FROM PUBLIC` doesn't touch a role's own separate default grant.
+`20260727000015_lock_down_auth_helper_functions.sql` explicitly revokes EXECUTE from
+`anon` on all four.
+
+`auth_role()`/`auth_department_ids()`/`auth_can_see_archived()` are all gated on
+`auth.uid()` (null for `anon`), so they leaked nothing in practice — but
+`entity_department_id(entity_type, entity_id)` takes no identity-bound parameter and,
+being `security definer`, bypasses RLS entirely: an unauthenticated caller could learn
+which department any machine/part/maintenance/repair record belongs to, given or by
+enumerating its UUID. That was the real, exploitable part of this gap.
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+node verify-anon-function-lockdown.mjs
+```
+
+Needs only the anon key/JWT — no service role, no throwaway account, nothing to clean
+up. **Verified 2026-07-28, 5/5 checks passing.**
+
+**Going forward**: any new `security definer` function added to `public` (Phase 12's
+Cloudinary Edge Functions may add more, if any call Postgres RPCs directly) needs its
+own explicit `revoke execute ... from anon` — this is a project-wide default privilege,
+not a one-time fix, so it will silently recur for every new function unless each one
+addresses it.

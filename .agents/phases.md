@@ -1461,7 +1461,24 @@ for someone to discover later.
   - Archived-write rejection (3 checks, added for this exact task row): fitting a part to an archived machine and scheduling maintenance on one both rejected with `403`.
 - [ ] Prove no application route or callable function exposes account creation, role assignment, or user-management capability. Structurally true today (no such route or function exists in `frontend/src` or `supabase/functions`), but not exercised as a specific negative test — carried over, not claimed as verified.
 - [X] Prove role self-escalation, actor spoofing, cross-parent IDOR, and archived writes fail. Self-escalation, cross-parent IDOR, and archived writes are all verified live (above). **Actor spoofing is enforced by constraint** (`part_replacements_insert`'s `performed_by = auth.uid()` check) **but not yet attempted live** — carried over specifically, not folded into "done".
-- [ ] Prove private-function access fails. Not applicable yet: the only `security definer` functions that exist are the auth helpers, which are *meant* to be callable by `authenticated` — there is no separate privileged/admin function in this schema yet for an unauthorized-access attempt to target. Revisit when Phase 12's Cloudinary functions add one.
+- [X] Prove private-function access fails. **Attempted 2026-07-28, found and fixed a
+  real gap.** All four `security definer` helper functions were documented as "revoked
+  from PUBLIC, granted only to `authenticated`" but a live check against
+  `information_schema.routine_privileges` showed `anon` held EXECUTE on all four
+  anyway — Supabase's default privileges auto-grant EXECUTE on new functions to
+  `anon`/`authenticated`, the same platform default the RLS migration already handled
+  for tables but missed for functions (`REVOKE ... FROM PUBLIC` doesn't touch a role's
+  own separate default grant). `auth_role()`/`auth_department_ids()`/
+  `auth_can_see_archived()` leaked nothing in practice (gated on `auth.uid()`, null for
+  `anon`), but `entity_department_id(entity_type, entity_id)` took no identity-bound
+  parameter and, being `security definer`, bypassed RLS entirely — an unauthenticated
+  caller could learn which department any machine/part/maintenance/repair record
+  belongs to, given or by enumerating its UUID. Fixed by
+  `20260727000015_lock_down_auth_helper_functions.sql` (explicit
+  `revoke execute ... from anon` on all four), verified live,
+  `supabase/scripts/verify-anon-function-lockdown.mjs`, **5/5 checks passing**. This is
+  a project-wide default, not a one-off: any new `security definer` function (Phase 12
+  may add some) needs its own explicit revoke.
 - [ ] Run advisors, reset, generated-type check, frontend tests/build, and Auth E2E. **Partially blocked, same Docker/Podman gap as Phase 9** (`gen types` needs a container runtime even against `--db-url`). Frontend tests/build are green (above). No Auth E2E exists yet because the frontend is still deliberately on mock auth.
 
 **Expected output:** Real Auth and complete RLS authorization. **Definition of done:** Mock authentication is absent and positive/negative security matrices pass. **Suggested commit:** `feat(auth): add email password auth and rls`
