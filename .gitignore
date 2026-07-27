@@ -1,0 +1,22 @@
+.DS_Store
+node_modules/
+dist/
+.pnpm-store/
+*.tsbuildinfo
+
+# Playwright run artifacts — reports, traces, and downloaded browser binaries
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+# Local credential/secret dumps - never commit real keys
+cloudinary.txt
+supabase.txt
+.env
+.env.local
+.env.*.local
+
+# Employee roster files for the operator bootstrap script — real emails, never committed
+supabase/scripts/roster*.json
+supabase/scripts/node_modules/

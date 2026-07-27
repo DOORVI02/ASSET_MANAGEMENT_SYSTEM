@@ -1,0 +1,9 @@
+{
+  "name": "supabase-operator-scripts",
+  "private": true,
+  "type": "module",
+  "description": "One-time, server-only Supabase operator scripts. Never deployed, never reachable over HTTP.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8"
+  }
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>SAIL Plant Maintenance</title>
+    <meta
+      name="description"
+      content="Plant maintenance and machine asset register for SAIL Bhilai Steel Plant: department-scoped machine records, installed parts, maintenance schedules, and repair tracking."
+    />
+    <!-- Internal plant application: keep it out of search indexes. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta property="og:title" content="SAIL Plant Maintenance" />
+    <meta
+      property="og:description"
+      content="Plant maintenance and machine asset register for SAIL Bhilai Steel Plant."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SAIL Plant Maintenance" />
+    <meta
+      name="twitter:description"
+      content="Plant maintenance and machine asset register for SAIL Bhilai Steel Plant."
+    />
+    <meta name="theme-color" content="#0b2545" />
+    <link rel="icon" type="image/avif" href="/sail_logo.avif" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!--
+      Applies the stored theme before first paint. Without this the page renders in
+      light, then flips to dark once React mounts. Mirrors readStoredTheme/resolveTheme
+      in src/lib/theme-storage.ts; the key and class name must stay in step with the
+      THEME_STORAGE_KEY and DARK_CLASS constants there (theme-storage.test.ts asserts it).
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = window.localStorage.getItem('sail_theme');
+          var preference =
+            stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+          var dark =
+            preference === 'dark' ||
+            (preference === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (error) {
+          // Storage or matchMedia unavailable: fall through to the light default.
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
