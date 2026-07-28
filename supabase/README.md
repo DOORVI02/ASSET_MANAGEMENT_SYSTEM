@@ -41,6 +41,7 @@ required. `SUPABASE_ACCESS_TOKEN` (in the root `.env`) is required for `link`,
 | `npx supabase secrets list` | List secret names (values shown hashed, not in plaintext). |
 
 **Not available in this environment**: `supabase start`/`stop` (local stack),
-`supabase db reset`, `supabase functions serve`, and `supabase gen types` — all
-require Docker/Podman. See `RUNBOOK.md`'s "Generated types" section for the
-hand-written substitute currently in use.
+`supabase db reset`, and `supabase functions serve` — these require Docker/Podman.
+`supabase gen types typescript --linked` was believed to need it too but doesn't (CLI
+2.110.0) — see `RUNBOOK.md`'s "Generated types" section, which now uses real generated
+output.

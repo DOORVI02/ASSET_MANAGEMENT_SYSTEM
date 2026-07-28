@@ -153,12 +153,15 @@ export async function getPartsSummary(
   if (error) throw error;
   if (!data) return empty;
 
+  // See departments.ts's getDepartmentSummary for why the `?? 0`s: the real generated
+  // types show these as nullable purely from view-introspection limits, never
+  // actually null in practice (the view's own SQL always COALESCEs to 0).
   return {
-    total: data.total,
-    machinesWithParts: data.machines_with_parts,
-    categories: data.categories,
-    dueSoon: data.due_soon,
-    overdue: data.overdue,
+    total: data.total ?? 0,
+    machinesWithParts: data.machines_with_parts ?? 0,
+    categories: data.categories ?? 0,
+    dueSoon: data.due_soon ?? 0,
+    overdue: data.overdue ?? 0,
   };
 }
 

@@ -146,13 +146,16 @@ export async function getMaintenanceSummary(
   if (error) throw error;
   if (!data) return empty;
 
+  // See departments.ts's getDepartmentSummary for why the `?? 0`s: the real generated
+  // types show these as nullable purely from view-introspection limits, never
+  // actually null in practice (the view's own SQL always COALESCEs to 0).
   return {
-    scheduled: data.scheduled,
-    inProgress: data.in_progress,
-    completed: data.completed,
-    cancelled: data.cancelled,
-    dueSoon: data.due_soon,
-    overdue: data.overdue,
+    scheduled: data.scheduled ?? 0,
+    inProgress: data.in_progress ?? 0,
+    completed: data.completed ?? 0,
+    cancelled: data.cancelled ?? 0,
+    dueSoon: data.due_soon ?? 0,
+    overdue: data.overdue ?? 0,
   };
 }
 

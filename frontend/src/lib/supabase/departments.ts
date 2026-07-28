@@ -64,15 +64,20 @@ export async function getDepartmentSummary(
   if (error) throw error;
   if (!data) return empty;
 
+  // The real generated types show every column here as nullable — Postgres's view
+  // introspection can't express that these aggregates are always COALESCE(..., 0) in
+  // the view's own SQL (`20260727000009_derived_status_and_views.sql`), never actually
+  // null. `department_id` falls back to the function's own `departmentId` param
+  // (always the same value `data.department_id` would hold) rather than a magic 0.
   return {
-    departmentId: data.department_id,
-    total: data.total,
-    active: data.active,
-    inactive: data.inactive,
-    underMaintenance: data.under_maintenance,
-    underRepair: data.under_repair,
-    retired: data.retired,
-    dueSoon: data.due_soon,
-    overdue: data.overdue,
+    departmentId: data.department_id ?? departmentId,
+    total: data.total ?? 0,
+    active: data.active ?? 0,
+    inactive: data.inactive ?? 0,
+    underMaintenance: data.under_maintenance ?? 0,
+    underRepair: data.under_repair ?? 0,
+    retired: data.retired ?? 0,
+    dueSoon: data.due_soon ?? 0,
+    overdue: data.overdue ?? 0,
   };
 }

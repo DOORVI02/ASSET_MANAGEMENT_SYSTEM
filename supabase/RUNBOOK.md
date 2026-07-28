@@ -66,15 +66,27 @@ personal access token was available — see below).
 
 ## Generated types
 
-`frontend/src/lib/database.types.ts` is **hand-written**, not `supabase gen types`
-output — that command requires a container runtime (Docker/Podman) even against a
-remote project, which this environment doesn't have. The hand-written version was
-verified once against a live `information_schema` dump (Phase 11) and has been kept in
-sync by hand with every migration since. **The moment Docker/Podman is available**,
-run `supabase gen types typescript --linked > frontend/src/lib/database.types.ts` and
-replace this file wholesale — keep the `Database` export name so `src/lib/supabase.ts`
-doesn't need to change. Treat any future drift between this file and a real migration
-as a bug in this file, not in the schema.
+`frontend/src/lib/database.types.ts` is **real `supabase gen types` output**, as of
+2026-07-28. Earlier phases (9 and 11) believed this command required a container
+runtime (Docker/Podman) even against a remote project — that turned out to be wrong
+for CLI 2.110.0, caught by a documentation walkthrough that actually ran the command
+the docs described instead of trusting the earlier note. Regenerate it after any
+migration with:
+
+```sh
+cd supabase
+supabase gen types typescript --linked > ../frontend/src/lib/database.types.ts
+```
+
+(`SUPABASE_ACCESS_TOKEN` must be set.) Keep the `Database` export name so
+`src/lib/supabase.ts` doesn't need to change. One real thing regenerating surfaced:
+Postgres's view-column introspection reports every column of a view (including
+`machines_with_derived`'s summary views) as nullable, even when the underlying join is
+through a `NOT NULL` foreign key that can never actually produce null — `mappers.ts`
+handles the base-machine columns with a documented `assumeNonNull` helper, and the
+aggregate-count views with `?? 0` (matching what their own SQL already guarantees via
+`COALESCE`). Re-check both after every regeneration in case a future migration
+actually changes what can be null.
 
 ## Auth bootstrap and offboarding
 
@@ -85,6 +97,12 @@ as a bug in this file, not in the schema.
   `profile_department_scope` rows in one call. **Never run against real employee data
   yet** — only verified with `admin.createUser` as a structural stand-in (Phase 10) and
   against throwaway `@example.test` accounts (every `verify-*.mjs` script since).
+- **SMTP is configured** (Gmail via an app password — `config.toml`'s
+  `[auth.email.smtp]`, wired 2026-07-28), so invite/recovery emails have somewhere to
+  actually send from. A real `inviteUserByEmail` call against a real inbox succeeded
+  at the API level; see `scripts/README.md` for whether inbox delivery itself has been
+  confirmed yet. This script's own roster→invite→profile path as one unit is still
+  only exercised with the `admin.createUser` stand-in above, not a real roster entry.
 - **Offboarding**: there is no separate offboarding script. Set `profiles.is_active =
   false` for the departing user (every RLS policy and every `security definer` helper
   function checks this — access stops the instant it flips, before the JWT itself

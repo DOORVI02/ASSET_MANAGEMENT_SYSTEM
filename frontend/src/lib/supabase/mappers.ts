@@ -25,6 +25,19 @@ import type { Database } from '@/lib/database.types';
 
 type MachineRow = Database['public']['Tables']['machines']['Row'];
 type MachineWithDerivedRow = Database['public']['Views']['machines_with_derived']['Row'];
+
+/**
+ * The real generated types mark every column of `machines_with_derived` as nullable —
+ * Postgres's view-column introspection can't express that a plain join through a
+ * `NOT NULL` foreign key (every machine has exactly one department) always succeeds;
+ * it falls back to nullable for any view column rather than tracking that guarantee.
+ * Used only for the base `machines` columns this view re-exposes unchanged, never for
+ * the view's own genuinely-optional derived columns (`image_url`, etc.), which already
+ * have their own `?? undefined` handling below.
+ */
+function assumeNonNull<T>(value: T | null): T {
+  return value as T;
+}
 type DepartmentRow = Database['public']['Tables']['departments']['Row'];
 type MachinePartRow = Database['public']['Tables']['machine_parts']['Row'];
 type PartReplacementRow = Database['public']['Tables']['part_replacements']['Row'];
@@ -56,24 +69,24 @@ export function mapDepartmentRow(row: DepartmentRow, machineCount = 0): Departme
  */
 export function mapMachineRow(row: MachineWithDerivedRow): Machine {
   return {
-    id: row.id,
-    code: row.code,
-    name: row.name,
-    department: row.department_name,
-    departmentId: row.department_id,
-    type: row.type,
-    manufacturer: row.manufacturer,
-    model: row.model,
-    location: row.location,
-    status: row.status,
-    installationDate: row.installation_date,
+    id: assumeNonNull(row.id),
+    code: assumeNonNull(row.code),
+    name: assumeNonNull(row.name),
+    department: assumeNonNull(row.department_name),
+    departmentId: assumeNonNull(row.department_id),
+    type: assumeNonNull(row.type),
+    manufacturer: assumeNonNull(row.manufacturer),
+    model: assumeNonNull(row.model),
+    location: assumeNonNull(row.location),
+    status: assumeNonNull(row.status),
+    installationDate: assumeNonNull(row.installation_date),
     lastMaintenanceDate: row.last_maintenance_date ?? '',
-    nextMaintenanceDate: row.next_maintenance_date,
-    description: row.description,
+    nextMaintenanceDate: assumeNonNull(row.next_maintenance_date),
+    description: assumeNonNull(row.description),
     imageUrl: row.image_url ?? undefined,
-    isArchived: row.is_archived,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    isArchived: assumeNonNull(row.is_archived),
+    createdAt: assumeNonNull(row.created_at),
+    updatedAt: assumeNonNull(row.updated_at),
     serialNumber: row.serial_number ?? undefined,
     capacity: row.capacity ?? undefined,
     powerRating: row.power_rating ?? undefined,

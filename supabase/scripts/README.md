@@ -31,11 +31,17 @@ an unknown code, the profile insert, and the department-scope insert — **was v
 using `admin.createUser` as a stand-in for the one call that needs a real deliverable
 address, all 7 checks passing, all test rows cleaned up.
 
-**Not verified**: `inviteUserByEmail` actually sending mail to a real inbox, and SMTP
-delivery generally (SMTP ownership is still an open decision, `.agents/flow.md` section
-16). The first real run against the actual roster is the first time this specific call
-will be genuinely exercised — expect to confirm invite emails are actually arriving
-before trusting the roster run to be complete.
+**Update 2026-07-28: SMTP is now configured** (Gmail via an app password, see
+`config.toml`'s `[auth.email.smtp]`), and `inviteUserByEmail` was called for real
+against a real inbox (`doorvi74@gmail.com`) — the API call itself succeeded with no
+error. **Actual delivery to the inbox is not yet confirmed** — that needs the
+recipient to check their inbox (including spam), which hasn't happened as of this
+writing. Update this note once that's confirmed either way. Also still not verified:
+this specific script's own end-to-end path (roster validation → department lookup →
+`inviteUserByEmail` → profile/scope insert, all in one call, against a real roster
+entry) — the invite-email test above called the Admin API directly, not through this
+script. The first real roster run is still the first genuine exercise of the whole
+script as one unit.
 
 ## `verify-data-layer.mjs`
 
@@ -58,7 +64,9 @@ scoped to the caller's own department; an Officer can create a machine in their 
 department; `machines_with_derived` exposes it with derived fields populated; creating a
 machine in an out-of-scope department is rejected by RLS; `department_summary` reflects
 the new machine; archive/restore both work; and machines in an out-of-scope department
-are invisible. **Verified 2026-07-27, 8/8 checks passing.**
+are invisible. **Verified 2026-07-27, 8/8 checks passing** — re-verified 2026-07-28
+after `database.types.ts` switched from hand-written to real generated output, still
+8/8.
 
 **Cleanup note**: the test machine is hard-deleted, but the test profile and Auth
 identity are not — `audit_logs` is genuinely append-only (a trigger rejects `DELETE`
@@ -287,3 +295,18 @@ node verify-concurrency-and-sessions.mjs
 ```
 
 **Verified 2026-07-28, 7/7 checks passing.**
+
+## Function-timeout behavior (not a checked-in script)
+
+Tested manually 2026-07-28 with a disposable Edge Function (`timeout-test`, deployed
+with `--no-verify-jwt`, deleted immediately after) that slept for a requested duration.
+5s and 60s both completed normally; 170s was killed by the platform partway through
+(measured wall time ~150s) with `{"code":"WORKER_RESOURCE_LIMIT", "message":"Function
+failed due to not having enough compute resources"}` and HTTP status 546. Confirms the
+platform enforces its own wall-clock/resource limit independent of anything this
+project's functions do — none of `cloudinary-sign`/`cloudinary-finalize`/
+`cloudinary-delete` do long-running work, so none are at risk of hitting it in normal
+operation. Not kept as a permanent script since it requires deploying and deleting a
+throwaway function each run; if this needs re-verifying later, recreate it from this
+description rather than assuming a deployed leftover exists (there should be none —
+confirmed via `supabase functions list` after cleanup).

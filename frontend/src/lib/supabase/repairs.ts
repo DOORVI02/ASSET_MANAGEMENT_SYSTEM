@@ -124,13 +124,16 @@ export async function getRepairSummary(
   if (error) throw error;
   if (!data) return empty;
 
+  // See departments.ts's getDepartmentSummary for why the `?? 0`s: the real generated
+  // types show these as nullable purely from view-introspection limits, never
+  // actually null in practice (the view's own SQL always COALESCEs to 0).
   return {
-    reported: data.reported,
-    inProgress: data.in_progress,
-    waitingForParts: data.waiting_for_parts,
-    completed: data.completed,
-    cancelled: data.cancelled,
-    downtimeHours: Number(data.downtime_hours),
+    reported: data.reported ?? 0,
+    inProgress: data.in_progress ?? 0,
+    waitingForParts: data.waiting_for_parts ?? 0,
+    completed: data.completed ?? 0,
+    cancelled: data.cancelled ?? 0,
+    downtimeHours: Number(data.downtime_hours ?? 0),
   };
 }
 

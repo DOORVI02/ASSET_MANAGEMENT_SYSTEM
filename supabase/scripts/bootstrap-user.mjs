@@ -13,9 +13,12 @@
  * establishes their own first password through Supabase's secure recovery flow
  * (plan.md: "Users establish or change their password through Supabase Auth's secure
  * recovery flow; application tables never store password values or hashes"). Sending
- * that email requires SMTP to be configured on the project — still an open decision
- * per .agents/flow.md section 16 — so until then this call will succeed at creating
- * the identity but the invite email itself may not be delivered.
+ * that email requires SMTP to be configured on the project — done 2026-07-28 (Gmail
+ * SMTP via an app password, see `config.toml`'s `[auth.email.smtp]`), and a real
+ * `inviteUserByEmail` call to a real inbox succeeded. This script's own logic (the
+ * roster validation, department lookup, profile/scope insert) is still only verified
+ * with `admin.createUser` as a structural stand-in, not with a real roster run — see
+ * `scripts/README.md` for exactly what is and isn't verified.
  *
  * Usage:
  *   cd supabase/scripts && npm install   # once

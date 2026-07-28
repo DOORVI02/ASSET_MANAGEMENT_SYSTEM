@@ -248,14 +248,19 @@ otp_length = 6
 otp_expiry = 3600
 
 # Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Gmail SMTP via an app password, wired 2026-07-28. `user`/`pass`/`admin_email` are
+# all `env(...)` references resolved at `config push` time from the shell environment
+# (sourced from the root `.env`, never committed here) — matching the existing
+# `pass = "env(...)"` convention this file's own template comment already showed, just
+# applied consistently to every field that shouldn't be a literal committed value.
+[auth.email.smtp]
+enabled = true
+host = "smtp.gmail.com"
+port = 587
+user = "env(SENDER_GMAIL)"
+pass = "env(GOOGLE_APP_PASSWORD)"
+admin_email = "env(SENDER_GMAIL)"
+sender_name = "SAIL Plant Maintenance"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
