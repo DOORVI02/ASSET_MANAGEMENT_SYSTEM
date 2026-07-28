@@ -1431,12 +1431,25 @@ needed `supabase config push`, which requires a personal access token — unavai
 until the user generated one and added it to `.env` on 2026-07-28.
 
 **Resolved 2026-07-28**: `supabase link --project-ref rlezcmnwemgtculvbaxh` succeeded
-with the new token; `supabase/config.toml`'s `enable_signup` was flipped from `true` to
-`false` and pushed with `supabase config push`. (That push also surfaced an unrelated
-config drift — `storage.vector.enabled = true`, a `supabase init` default that isn't
-actually usable on this project's tier and was blocking the push with a 402 — fixed by
-setting it back to `false`, matching what the project actually has.) Re-read
-`/auth/v1/settings` live afterward: **`disable_signup: true`**, confirmed.
+with the new token; `supabase/config.toml`'s top-level `[auth].enable_signup` was
+flipped from `true` to `false` and pushed with `supabase config push`. (That push also
+surfaced an unrelated config drift — `storage.vector.enabled = true`, a `supabase init`
+default that isn't actually usable on this project's tier and was blocking the push
+with a 402 — fixed by setting it back to `false`, matching what the project actually
+has.) Re-read `/auth/v1/settings` live afterward: **`disable_signup: true`**, confirmed.
+
+A second push immediately after found `[auth.email].enable_signup` — a *separate*,
+provider-specific copy of the same flag — was still `true` live, even though the
+top-level flag already read as fixed. The `config push` diff caught it directly
+(`-enable_signup = true` / `+enable_signup = false` under `[email]`), so it was fixed
+in the same pass rather than shipping as a second undiscovered gap. Re-verified
+`disable_signup: true` still holds after this second push.
+
+Separately, an Edge Function deploy/invoke smoke test (a disposable `healthcheck-test`
+function, deployed with `--use-api` and immediately deleted) confirmed the token also
+unlocks real Edge Function deployment without needing Docker/Podman — the other half
+of Phase 9/10's `LegacyPlatformAuthRequiredError` blocker. This makes Phase 12
+(Cloudinary via Edge Functions) fully achievable end to end from this environment.
 
 ### Tasks
 
