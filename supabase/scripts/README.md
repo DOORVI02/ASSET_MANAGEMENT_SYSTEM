@@ -265,3 +265,25 @@ every other verify script's own cleanup); then a genuine orphan was manually cre
 (a real Cloudinary upload with no corresponding `attachments` row) and confirmed
 detected; then confirmed `--delete-orphans` actually removes it, and a final run
 confirms zero drift again afterward.
+
+## `verify-concurrency-and-sessions.mjs`
+
+Live checks for Phase 13's "concurrency, transaction rollback, expired sessions" task
+— the part of it achievable without the frontend auth+data cutover, since these
+exercise the live database and Edge Functions directly rather than the UI. Fires two
+simultaneous machine-creation requests with the same code and confirms exactly one
+wins (a real race against `machines_code_key`, not a sequential check-then-insert);
+confirms a constraint-violating insert (unknown `department_id`) leaves zero
+partial/orphaned rows; and confirms a syntactically malformed token and a
+well-formed-but-forged/expired-looking token are both rejected the same way by
+`getAuthorizedCaller`.
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+node verify-concurrency-and-sessions.mjs
+```
+
+**Verified 2026-07-28, 7/7 checks passing.**
