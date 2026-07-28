@@ -213,3 +213,55 @@ node verify-cloudinary-lifecycle.mjs
 
 **Verified 2026-07-28, 11/11 checks passing**, confirmed zero leftover Cloudinary
 assets and zero leftover test rows afterward.
+
+## `verify-cors-and-secrets.mjs`
+
+Live regression check for a real gap found and fixed 2026-07-28: `ALLOWED_ORIGINS`
+had never actually been set as an Edge Function secret since the Phase 8
+`_shared/cors.ts` skeleton was written. Every Edge Function's CORS header was
+silently empty — invisible to every test in this project up to this point, since
+those are all Node scripts (server-to-server calls don't enforce CORS), but it would
+have broken every real browser call the moment the frontend actually invoked these
+functions. Fixed by `supabase secrets set ALLOWED_ORIGINS=http://localhost:5173`
+(matching the existing `.env` value). Also reconfirms, against a live unauthenticated
+response rather than just source code, that no Edge Function ever echoes the
+Cloudinary API secret or the Supabase service-role key.
+
+```sh
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export CLOUDINARY_API_SECRET=...        # optional, strengthens the secret-leak check
+export SUPABASE_SERVICE_ROLE_KEY=...    # optional, strengthens the secret-leak check
+node verify-cors-and-secrets.mjs
+```
+
+**Verified 2026-07-28, 5/5 checks passing.**
+
+## `reconcile-cloudinary-orphans.mjs`
+
+Operational tool, not a test: compares real Cloudinary assets under
+`sail-plant-maintenance/` against `attachments.cloudinary_public_id` rows and reports
+drift in both directions — orphaned Cloudinary assets (uploaded but never finalized,
+e.g. the browser closed between upload and `cloudinary-finalize`) and dangling
+attachment rows (pointing at a Cloudinary asset that no longer exists, e.g. deleted
+out-of-band in the Cloudinary dashboard). Report-only by default; pass
+`--delete-orphans` to actually destroy the orphaned Cloudinary assets it found (never
+touches the `attachments` table either way, and never deletes anything with a
+matching row regardless of flags).
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+export CLOUDINARY_CLOUD_NAME=...
+export CLOUDINARY_API_KEY=...
+export CLOUDINARY_API_SECRET=...
+node reconcile-cloudinary-orphans.mjs               # report only
+node reconcile-cloudinary-orphans.mjs --delete-orphans   # also clean up orphans found
+```
+
+**Verified 2026-07-28**: ran clean against the real project (zero drift, matching
+every other verify script's own cleanup); then a genuine orphan was manually created
+(a real Cloudinary upload with no corresponding `attachments` row) and confirmed
+detected; then confirmed `--delete-orphans` actually removes it, and a final run
+confirms zero drift again afterward.
