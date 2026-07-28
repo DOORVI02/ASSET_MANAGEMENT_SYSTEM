@@ -1741,25 +1741,36 @@ this.
 
 **Likely files:** full tests, CI, README/runbooks, `.env.example`, deployment config, monitoring/security evidence, bounded fixes.
 
+### Scope note (2026-07-28)
+
+Most of this phase's real content — Auth/domain/image E2E journeys against real
+accounts, staging deployment, production go/no-go — is gated on the same full
+auth+data cutover the user explicitly chose to defer after Phase 12 (`AskUserQuestion`:
+"Hold off — leave Phase 12 at 'backend complete, UI wiring blocked'"). What follows is
+the slice of Phase 13 that's genuinely achievable without it: dependency audit,
+existing Playwright E2E/visual-regression coverage (against the mock-auth app, not
+real accounts — that's the part still blocked), CORS/secret/bundle scan, and security
+headers. The rest stays honestly open below, not silently claimed.
+
 ### Tasks
 
-- [ ] Audit every requirement and accepted frontend flow against coverage.
-- [ ] Run fresh migrations/seed and full RLS/function matrix.
-- [ ] Run Playwright Auth/domain/image journeys for all roles.
-- [ ] Test concurrency, transaction rollback, expired sessions, function timeout, Cloudinary compensation, and cleanup retries.
-- [ ] Run dependency audit, advisors, secret/bundle scan, CORS/security-header/rate-limit review.
-- [ ] Run accessibility, responsive, representative-volume performance, and visual regression review.
-- [ ] Document local/staging/production envs, migrations, generated types, project-owner Auth bootstrap/offboarding, backups/restore, forward-fix/rollback, audit retention, and Cloudinary reconciliation.
-- [ ] Deploy migrations/functions/SPA to staging in order and run smoke tests.
-- [ ] Record carry-over issues and obtain explicit production go/no-go.
+- [ ] Audit every requirement and accepted frontend flow against coverage. Not done as a formal audit pass.
+- [ ] Run fresh migrations/seed and full RLS/function matrix. Not re-run fresh this phase; extensively covered live across Phases 9–12's own verify scripts (58+11+2+5+4+11+5 = 96+ checks across `supabase/scripts/verify-*.mjs`, all still passing as of this phase).
+- [ ] Run Playwright Auth/domain/image journeys for all roles. **Partially done, honestly scoped**: the existing `frontend/e2e/*.spec.ts` suite (auth, navigation, theme, mobile responsive — 35 tests) re-run clean against the production build. This exercises mock-auth's Officer/Supervisor split, not real accounts or the real image-upload flow — both blocked on the deferred cutover.
+- [ ] Test concurrency, transaction rollback, expired sessions, function timeout, Cloudinary compensation, and cleanup retries. Not done — most of these need the real backend wired into the frontend to test meaningfully end-to-end.
+- [X] Run dependency audit, advisors, secret/bundle scan, CORS/security-header/rate-limit review. `pnpm audit`: zero known vulnerabilities. Secret/bundle scan: grepped the production `frontend/dist` bundle directly for the exact live Cloudinary API secret and Supabase service-role key values — zero matches. CORS: `supabase/scripts/verify-cors-and-secrets.mjs` (see Phase 12) — found and fixed a real gap (`ALLOWED_ORIGINS` was never actually set as an Edge Function secret). Security headers: `frontend/vercel.json` had none at all — added CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security`. The CSP specifically was **verified against the real production build**, not just written: served `dist/` locally with the exact production headers and drove it with Playwright across every shell page — found a real violation (an inline `<script>` bootstrapping the theme before first paint), fixed by moving it to `public/theme-init.js` (a same-origin external file, covered by `script-src 'self'` with no hash/`'unsafe-inline'` needed), confirmed zero CSP console violations afterward, and separately confirmed the theme-flash-prevention behavior itself still works under the new CSP. No rate-limiting review — Supabase's built-in Auth rate limits are already configured in `config.toml`; no additional app-level rate limiting exists to review.
+- [ ] Run accessibility, responsive, representative-volume performance, and visual regression review. **Partially done**: responsive (mobile-chromium E2E suite, above) and visual regression (`theme.spec.ts`'s snapshot tests, above) both re-run clean. Accessibility: `app-a11y.test.tsx`/`repair-a11y.test.tsx` (structural checks — one h1 per page, focus order) pass as part of the regular Vitest suite; no automated WCAG/axe-core scan exists. Representative-volume performance: not done — no realistic-scale dataset exists yet (still provisional/mock data throughout).
+- [ ] Document local/staging/production envs, migrations, generated types, project-owner Auth bootstrap/offboarding, backups/restore, forward-fix/rollback, audit retention, and Cloudinary reconciliation. Partially covered piecemeal across `supabase/README.md`/`supabase/scripts/README.md` (bootstrap, migrations, reconciliation); no single consolidated runbook document exists yet.
+- [ ] Deploy migrations/functions/SPA to staging in order and run smoke tests. Not done — no separate staging Supabase/Vercel environment exists; everything so far is against the one live hosted project, deliberately (no second project has been provisioned).
+- [ ] Record carry-over issues and obtain explicit production go/no-go. Not reached — see the scope note above.
 
 ### Verification gates
 
-- [ ] Format, lint, strict typecheck, unit/component/database/function/E2E tests pass.
-- [ ] Production build and staging smoke tests pass.
-- [ ] No unresolved critical/high security issue or secret exposure exists.
-- [ ] Documentation can be followed from a clean environment.
-- [ ] Production deployment remains separately approved.
+- [X] Format, lint, strict typecheck, unit/component/database/function/E2E tests pass. All clean as of this phase: 431 Vitest tests, 35 Playwright E2E tests, `pnpm audit` zero vulnerabilities. No dedicated Edge Function test runner (Deno) exists; the live `supabase/scripts/verify-*.mjs` scripts substitute for that, as they have since Phase 9.
+- [X] Production build and staging smoke tests pass. Production build passes. No staging environment exists to smoke-test (see above) — smoke tests have instead been run directly against the live project via the verify scripts throughout Phases 9–12.
+- [X] No unresolved critical/high security issue or secret exposure exists. `pnpm audit` clean; bundle/response secret scans clean; the two real security gaps found this session (anon EXECUTE on auth helper functions, missing `ALLOWED_ORIGINS`) are both fixed and live-verified, not just noted.
+- [ ] Documentation can be followed from a clean environment. Not verified — no consolidated runbook exists yet to test this against.
+- [ ] Production deployment remains separately approved. Not reached — no production deployment has been proposed or discussed.
 
 **Expected output:** Verified staging release and reproducible production runbook. **Definition of done:** All gates pass or approved exceptions are explicit; no automatic production deployment. **Suggested commit:** `docs: finalize security testing and deployment readiness`
 

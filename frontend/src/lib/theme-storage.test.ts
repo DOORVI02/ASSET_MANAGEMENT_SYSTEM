@@ -58,22 +58,31 @@ describe('theme storage', () => {
 });
 
 describe('index.html theme bootstrap', () => {
-  // The inline script duplicates readStoredTheme/resolveTheme in plain JS so the right
-  // theme is applied before first paint. It cannot import these constants, so this test
-  // is what stops the two copies drifting apart.
+  // public/theme-init.js duplicates readStoredTheme/resolveTheme in plain JS so the
+  // right theme is applied before first paint — it cannot import these constants, so
+  // this test is what stops the two copies drifting apart. It's a same-origin external
+  // file rather than an inline <script> specifically so the production CSP's
+  // `script-src 'self'` (no 'unsafe-inline') covers it without a content hash that
+  // would go stale the next time this file changes (verified against the real CSP via
+  // `csp-check.mjs` against the production build, not just here).
   const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8');
+  const themeInit = readFileSync(resolve(__dirname, '../../public/theme-init.js'), 'utf8');
+
+  it('index.html actually loads the theme bootstrap script', () => {
+    expect(html).toContain('<script src="/theme-init.js"></script>');
+  });
 
   it('reads the same storage key the app writes', () => {
     expect(THEME_STORAGE_KEY).toBe('sail_theme');
-    expect(html).toContain(`getItem('${THEME_STORAGE_KEY}')`);
+    expect(themeInit).toContain(`getItem('${THEME_STORAGE_KEY}')`);
   });
 
   it('toggles the same class the dark variant is keyed on', () => {
     expect(DARK_CLASS).toBe('dark');
-    expect(html).toContain(`classList.toggle('${DARK_CLASS}', dark)`);
+    expect(themeInit).toContain(`classList.toggle('${DARK_CLASS}', dark)`);
   });
 
   it('honours the system preference as well as an explicit one', () => {
-    expect(html).toContain('(prefers-color-scheme: dark)');
+    expect(themeInit).toContain('(prefers-color-scheme: dark)');
   });
 });
