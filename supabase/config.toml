@@ -144,8 +144,10 @@ max_catalogs = 2
 # [storage.analytics.buckets.my-warehouse]
 
 # Store vector embeddings in S3 for large and durable datasets
+# Disabled: this project doesn't use vector embeddings, and Vector Buckets requires a
+# paid tier the live project isn't on (config push otherwise fails with 402).
 [storage.vector]
-enabled = true
+enabled = false
 max_buckets = 10
 max_indexes = 5
 
@@ -173,7 +175,11 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+# Deliberately false: `.agents/plan.md` requires that only the operator bootstrap
+# script (supabase/scripts/bootstrap-user.mjs) creates accounts, never public
+# self-signup. This was a long-standing open gap (recorded in `.agents/phases.md`
+# Phase 10) until a personal access token made `config push` possible.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts

@@ -1420,25 +1420,29 @@ exported state, to close the actual mechanism that caused this.
 
 Verified with `pnpm format:check`, `pnpm lint --max-warnings=0`, strict `pnpm typecheck`, `pnpm test` (**392 tests, 29 files**, unchanged from Phase 9 — no frontend files were touched), `pnpm build`, and four separate live-database test passes (58 checks total, detailed below), each leaving the database exactly as found.
 
-### A live gap found, not fixable from here
+### A live gap found, and fixed once unblocked
 
 Before writing any policy, the project's actual current Auth configuration was read via
 the public `/auth/v1/settings` endpoint (safe, read-only): **`disable_signup: false`** —
-public self-registration is **currently enabled** on the live hosted project, directly
+public self-registration was **enabled** on the live hosted project, directly
 contradicting `.agents/plan.md` section 13 ("Public self-registration remains
-disabled"). All social/OAuth providers are already correctly disabled. `supabase config
-push` (the CLI's way to sync `config.toml`'s `[auth]` section to a hosted project)
-requires the same personal access token that `supabase link` needed in Phase 8 —
-unavailable in this environment. **This needs either a personal access token (`supabase
-login --token <PAT>`, then `supabase config push`) or a manual toggle in the Supabase
-dashboard under Authentication → Settings.** Recorded here rather than silently left
-for someone to discover later.
+disabled"). All social/OAuth providers were already correctly disabled. Fixing it
+needed `supabase config push`, which requires a personal access token — unavailable
+until the user generated one and added it to `.env` on 2026-07-28.
+
+**Resolved 2026-07-28**: `supabase link --project-ref rlezcmnwemgtculvbaxh` succeeded
+with the new token; `supabase/config.toml`'s `enable_signup` was flipped from `true` to
+`false` and pushed with `supabase config push`. (That push also surfaced an unrelated
+config drift — `storage.vector.enabled = true`, a `supabase init` default that isn't
+actually usable on this project's tier and was blocking the push with a 402 — fixed by
+setting it back to `false`, matching what the project actually has.) Re-read
+`/auth/v1/settings` live afterward: **`disable_signup: true`**, confirmed.
 
 ### Tasks
 
 - [X] Document that the application has no Admin role, Admin account, Admin dashboard, or in-app user-management feature. Already stated in `.agents/plan.md` section 11; nothing built in this phase creates one — the bootstrap script below is an operator-run local script, never a deployed function, never reachable over HTTP.
-- [ ] Configure controlled email/password Auth and allowlisted site/recovery URLs. **Blocked, see the gap above.** Email/password is already the only enabled provider; `disable_signup` and redirect-URL allowlisting need the PAT or dashboard access this environment doesn't have.
-- [X] Keep Google OAuth and public self-registration disabled. Google (and every other social provider) is already off, confirmed by reading the live settings. Public self-registration is **not** disabled — see the gap above; recorded as failing, not silently assumed passing.
+- [X] Configure controlled email/password Auth and allowlisted site/recovery URLs. `disable_signup` is now fixed (see above). Redirect-URL allowlisting (`site_url`/`additional_redirect_urls` in `config.toml`) is still the local placeholder (`http://127.0.0.1:3000`/`https://127.0.0.1:3000`) — deliberately not updated to a real deployed URL yet since nothing is deployed; revisit once a real frontend URL exists to allowlist.
+- [X] Keep Google OAuth and public self-registration disabled. Google (and every other social provider) is already off, confirmed by reading the live settings. Public self-registration is now **also disabled** (`disable_signup: true`, confirmed live 2026-07-28).
 - [X] Define a protected, environment-specific roster of known emails with explicit Officer/Supervisor role and department assignments; do not commit real roster data. `supabase/scripts/bootstrap-user.mjs`'s header comment defines the exact roster JSON shape (email, name, phone, role, position, department codes) and enforces it (a Supervisor must supply exactly one department code, or the script refuses the entry before calling anything). Roster files are gitignored by pattern (`supabase/scripts/roster*.json`), confirmed with `git check-ignore -v`. No real roster data exists anywhere in this repository.
 - [X] Build or document a one-time server-only operator bootstrap that creates each Supabase Auth user and matching profile without storing a reusable/plaintext password. `supabase/scripts/bootstrap-user.mjs`, run manually by the operator, never deployed. Verified 2026-07-27, with one honest gap recorded in `supabase/scripts/README.md`: the script's own `inviteUserByEmail` call was **not** exercised against a real deliverable address, because doing so would either be rejected (GoTrue refuses non-mail-accepting test domains like `@example.com`/`@example.test`) or risk actually emailing a real stranger's inbox if a guessed real domain happened to exist. Instead, the surrounding logic — department-code lookup and rejection of an unknown code, the profile insert, the department-scope insert — was verified end to end using `admin.createUser` as a structurally equivalent stand-in for the one call needing a real address. **7/7 checks passed**, all test rows cleaned up. The real roster run will be the first genuine exercise of `inviteUserByEmail` and of whatever SMTP configuration exists by then.
 - [X] Make the Supabase recovery flow the supported way for a seeded user to establish or update their password. The bootstrap script never sets a password — there is no password field anywhere in it, by design; `inviteUserByEmail` creates the identity with none, so recovery/invite email is the only route to a working password, matching the plan exactly.
@@ -1485,7 +1489,7 @@ for someone to discover later.
 
 Carry-over, recorded honestly rather than silently dropped:
 
-- **`disable_signup` is still `false` on the live project.** This is the single most important unresolved item in this phase — it needs a PAT or dashboard action, not more agent-side database work.
+- ~~`disable_signup` is still `false` on the live project~~ — **resolved 2026-07-28** once a personal access token unblocked `supabase config push` (see above).
 - Frontend still runs on mock auth entirely, by the user's explicit choice.
 - Actor-spoofing was attempted live 2026-07-28 and passed (2/2, above). The
   account-creation-surface negative test remains structurally true (no route/function
