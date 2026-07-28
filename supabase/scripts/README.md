@@ -43,6 +43,81 @@ entry) — the invite-email test above called the Admin API directly, not throug
 script. The first real roster run is still the first genuine exercise of the whole
 script as one unit.
 
+**Update 2026-07-29: the script has now had its first real roster run**, provisioning the
+first two production accounts (one officer with four departments, one supervisor with
+one). Every step ran for real against the live project: roster validation, department-code
+lookup, identity creation, profile insert, and scope insert. Both accounts were then
+confirmed by a real `signInWithPassword` and a real RLS-scoped read of `profiles`,
+`profile_department_scope`, and `departments` — the officer saw exactly their four
+departments and the supervisor exactly one, which is the department-scoping rule working
+end to end rather than merely inserted.
+
+Two changes came out of that run:
+
+- **`--set-initial-password`.** The default path is still `inviteUserByEmail` with no
+  password, which is what `.agents/plan.md` section 13 describes. This flag instead creates
+  the identity with a password that *the script generates itself* (CSPRNG, 14 characters,
+  policy-satisfying) and prints once. The roster file still has no password field, so the
+  flag cannot put a credential on disk. A printed password is a disclosed password — change
+  it through the recovery flow before the account matters.
+- **`phone` may now be `""`.** It is still a required key, so a forgotten field is still
+  caught, but an operator without someone's number no longer has to invent one to satisfy
+  the validator. Fabricated contact details in a production table are worse than a blank.
+
+Scope rows are also now inserted one at a time rather than as a batch, for the reason
+`verify-supervisor-scope-rule.mjs` documents below.
+
+## `verify-supervisor-scope-rule.mjs`
+
+Checks the supervisor single-department rule (flow.md section 6.2) against the live
+database **as the service role** — the most privileged caller there is. A rule that only
+holds for under-privileged callers is not a data-integrity rule.
+
+```sh
+export SUPABASE_URL=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+node verify-supervisor-scope-rule.mjs
+```
+
+Written 2026-07-29 after finding a **real bypass** while provisioning the first real
+accounts. The original trigger (migration `20260727000002`) was
+`before insert ... for each row` and counted the rows already in
+`profile_department_scope`. Within a single multi-row `insert`, the statement's own earlier
+rows are not visible to that count — the snapshot predates them — so
+`insert ... values (sup, a), (sup, b)` passed with *both* invocations counting zero. Every
+caller up to that point happened to insert one row at a time, which is why nothing caught
+it. A second bypass existed in the other direction: `update profiles set role =
+'supervisor'` on a profile already holding several departments reached the forbidden state
+without touching the guarded table at all.
+
+Migration `20260728000017` fixes both — the scope trigger became `after insert` (siblings
+are visible, so the check is `> 1` on the resulting state) and a new trigger guards the
+role change. All 7 checks pass, including the two that must *not* over-correct: a
+supervisor can still be given their one department, and an officer can still hold several.
+
+## `purge-verification-accounts.mjs`
+
+Deletes the throwaway `@example.test` accounts that Phases 10–13's verification scripts
+left behind — those scripts deactivate-and-ban rather than delete, so residue accumulates.
+
+```sh
+export SUPABASE_URL=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+node purge-verification-accounts.mjs           # dry run
+node purge-verification-accounts.mjs --apply
+```
+
+Hard-coded to the `@example.test` suffix, which RFC 6761 reserves and no real address can
+use, so the script cannot delete a person.
+
+**Run 2026-07-29**: 23 throwaway identities and 23 profiles found; **16 of each deleted, 7
+profiles retained**. The retained ones are referenced by `audit_logs.performed_by`, and
+`audit_logs` rejects `DELETE` for every caller including the service role (append-only by
+design, verified Phase 12) while profiles are referenced `on delete restrict` so an
+actor's history can't be orphaned. Those 7 are deactivated and their identities banned
+instead. The 21 verification rows in `audit_logs` are permanent — that is the append-only
+guarantee working, not a cleanup failure.
+
 ## `verify-data-layer.mjs`
 
 Live smoke test for the Phase 11 data-access layer (`frontend/src/lib/supabase/*.ts`)
