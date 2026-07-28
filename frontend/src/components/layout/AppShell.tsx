@@ -89,7 +89,7 @@ export function AppShell({ children }: AppShellProps) {
         <main
           id="main-content"
           tabIndex={-1}
-          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 focus:outline-none sm:p-6 lg:p-8"
+          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 focus:outline-none sm:p-6 lg:p-8"
         >
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>

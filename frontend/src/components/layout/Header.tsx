@@ -159,7 +159,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 Nothing needs attention in this department.
               </p>
             ) : (
-              <div className="custom-scrollbar max-h-80 overflow-y-auto">
+              <div className="custom-scrollbar max-h-80 overflow-y-auto overscroll-contain">
                 {notifications.map((notification) => (
                   <DropdownMenuItem key={notification.id} asChild className="cursor-pointer">
                     <Link

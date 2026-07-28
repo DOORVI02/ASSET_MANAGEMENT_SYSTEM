@@ -365,7 +365,7 @@ export default function MaintenancePage() {
                 </div>
                 <div>
                   <h4 className="mb-3 text-sm font-semibold">Type</h4>
-                  <div className="custom-scrollbar max-h-40 space-y-2 overflow-y-auto">
+                  <div className="custom-scrollbar max-h-40 space-y-2 overflow-y-auto overscroll-contain">
                     {typeValues.map((type) => (
                       <label key={type} className="flex cursor-pointer items-center gap-2">
                         <Checkbox

@@ -93,7 +93,7 @@ function NavContent({
             <div className="flex flex-col">
               <span className="font-bold text-white text-sm tracking-wide leading-tight">SAIL</span>
               <span className="text-sidebar-foreground text-[10px] uppercase tracking-wider">
-                Plant Maint.
+                Plant Maintenance
               </span>
             </div>
           )}
@@ -103,7 +103,7 @@ function NavContent({
       {/* Nav links */}
       <nav
         aria-label={navLabel}
-        className="custom-scrollbar custom-scrollbar-dark flex-1 overflow-y-auto py-4"
+        className="custom-scrollbar custom-scrollbar-dark flex-1 overflow-y-auto overscroll-contain py-4"
       >
         {navGroups.map((group, i) => (
           <div key={i} className="mb-6">

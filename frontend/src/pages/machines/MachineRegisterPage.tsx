@@ -339,7 +339,7 @@ export default function MachineRegisterPage() {
             {canChoose ? (
               <div>
                 <h4 className="text-sm font-semibold mb-3">Associated departments</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                <div className="space-y-2 max-h-48 overflow-y-auto overscroll-contain custom-scrollbar">
                   {available.map((department) => (
                     <label key={department.id} className="flex items-center gap-2 cursor-pointer">
                       <Checkbox

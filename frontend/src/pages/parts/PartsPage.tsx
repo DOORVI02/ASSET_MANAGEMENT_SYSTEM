@@ -314,7 +314,7 @@ export default function PartsPage() {
 
             <div>
               <h4 className="mb-3 text-sm font-semibold">Category</h4>
-              <div className="custom-scrollbar max-h-48 space-y-2 overflow-y-auto">
+              <div className="custom-scrollbar max-h-48 space-y-2 overflow-y-auto overscroll-contain">
                 {categories.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No categories in this department.</p>
                 ) : (
@@ -333,7 +333,7 @@ export default function PartsPage() {
 
             <div>
               <h4 className="mb-3 text-sm font-semibold">Machine</h4>
-              <div className="custom-scrollbar max-h-48 space-y-2 overflow-y-auto">
+              <div className="custom-scrollbar max-h-48 space-y-2 overflow-y-auto overscroll-contain">
                 {machines.map(([machineId, machineCode]) => (
                   <label key={machineId} className="flex cursor-pointer items-center gap-2">
                     <Checkbox
