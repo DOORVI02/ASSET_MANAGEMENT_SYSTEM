@@ -5,7 +5,7 @@
  *
  * Request: { entityType: 'machine'|'part'|'maintenance'|'repair', entityId: uuid,
  *            fileName: string, fileType: string, fileSize: number }
- * Response: { cloudName, apiKey, timestamp, signature, folder, publicId, uploadUrl }
+ * Response: { cloudName, apiKey, timestamp, signature, folder, publicId, overwrite, uploadUrl }
  *
  * Validates, in order: bearer JWT and active profile (`_shared/auth.ts`), role
  * (Officer or Supervisor — `.agents/plan.md` "Image edit authority"), file type/size
@@ -17,14 +17,15 @@
  */
 import { z } from 'npm:zod@3';
 import { getAuthorizedCaller, serviceRoleClient } from '../_shared/auth.ts';
-import { corsHeaders, handlePreflight } from '../_shared/cors.ts';
+import { handlePreflight } from '../_shared/cors.ts';
 import { errorResponse, jsonResponse, HttpError } from '../_shared/errors.ts';
 import { requestId } from '../_shared/request-id.ts';
 import { parseJsonBody } from '../_shared/validation.ts';
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, loadCloudinaryConfig, signParams } from '../_shared/cloudinary.ts';
+import { ATTACHABLE_ENTITY_TYPES, SINGLE_IMAGE_ENTITY_TYPES, resolveEntityDepartment } from '../_shared/entities.ts';
 
 const requestSchema = z.object({
-  entityType: z.enum(['machine', 'part', 'maintenance', 'repair']),
+  entityType: z.enum(ATTACHABLE_ENTITY_TYPES),
   entityId: z.string().uuid(),
   fileName: z.string().min(1).max(255),
   fileType: z.enum(ALLOWED_IMAGE_TYPES),
@@ -34,13 +35,6 @@ const requestSchema = z.object({
     .positive()
     .max(MAX_IMAGE_BYTES, `File exceeds the ${MAX_IMAGE_BYTES / (1024 * 1024)} MB limit.`),
 });
-
-const entityTables: Record<z.infer<typeof requestSchema>['entityType'], string> = {
-  machine: 'machines',
-  part: 'machine_parts',
-  maintenance: 'maintenance_records',
-  repair: 'repair_records',
-};
 
 Deno.serve(async (req) => {
   const id = requestId();
@@ -66,20 +60,22 @@ Deno.serve(async (req) => {
 
     const { cloudName, apiKey, apiSecret } = loadCloudinaryConfig();
     const timestamp = Math.floor(Date.now() / 1000);
-    // One image per entity: a fixed public_id per (entityType, entityId), with
-    // `overwrite=true`, means re-uploading always replaces the same Cloudinary asset
-    // rather than accumulating orphans — `cloudinary-cleanup` still removes the old
-    // `attachments` row/asset pointer, but the asset slot itself never grows unbounded
-    // even if that step is ever skipped.
     const folder = `sail-plant-maintenance/${body.entityType}`;
-    const publicId = body.entityId;
+    const isSingleImage = SINGLE_IMAGE_ENTITY_TYPES.has(body.entityType);
+    // Single-image entities (machine/part): a fixed public_id per entity with
+    // `overwrite=true` means re-uploading always replaces the same Cloudinary asset in
+    // place — the asset slot never grows unbounded even if `cloudinary-finalize`'s
+    // corresponding old-row cleanup is ever skipped. Multi-image entities (repair,
+    // and maintenance by the same default): a unique public_id per upload, since a
+    // fixed one would silently overwrite a prior evidence shot instead of adding to it.
+    const publicId = isSingleImage ? body.entityId : `${body.entityId}/${crypto.randomUUID()}`;
 
-    const paramsToSign = {
+    const paramsToSign: Record<string, string | number> = {
       timestamp,
       folder,
       public_id: publicId,
-      overwrite: 'true',
     };
+    if (isSingleImage) paramsToSign.overwrite = 'true';
     const signature = await signParams(paramsToSign, apiSecret);
 
     return jsonResponse(
@@ -90,6 +86,7 @@ Deno.serve(async (req) => {
         signature,
         folder,
         publicId,
+        overwrite: isSingleImage,
         uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
       },
       id,
@@ -99,35 +96,3 @@ Deno.serve(async (req) => {
     return errorResponse(error, id, origin);
   }
 });
-
-/** Returns the entity's `department_id`, resolved generically across all four attachable entity types. */
-async function resolveEntityDepartment(
-  client: ReturnType<typeof serviceRoleClient>,
-  entityType: z.infer<typeof requestSchema>['entityType'],
-  entityId: string,
-): Promise<string> {
-  if (entityType === 'machine') {
-    const { data, error } = await client
-      .from('machines')
-      .select('department_id, is_archived')
-      .eq('id', entityId)
-      .maybeSingle();
-    if (error) throw new HttpError(500, 'Failed to look up the machine.');
-    if (!data) throw new HttpError(404, 'Machine not found.');
-    if (data.is_archived) throw new HttpError(409, 'Archived machines do not accept image changes.');
-    return data.department_id;
-  }
-
-  const joinTable = entityTables[entityType];
-  const { data, error } = await client
-    .from(joinTable)
-    .select('machine_id, machines:machine_id(department_id, is_archived)')
-    .eq('id', entityId)
-    .maybeSingle();
-  if (error) throw new HttpError(500, `Failed to look up the ${entityType} record.`);
-  if (!data) throw new HttpError(404, `${entityType} record not found.`);
-  const machine = data.machines as { department_id: string; is_archived: boolean } | null;
-  if (!machine) throw new HttpError(404, 'Parent machine not found.');
-  if (machine.is_archived) throw new HttpError(409, 'Archived machines do not accept image changes.');
-  return machine.department_id;
-}

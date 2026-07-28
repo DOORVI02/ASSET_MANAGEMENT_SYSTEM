@@ -186,3 +186,30 @@ node verify-cloudinary-sign.mjs
 direct Cloudinary Admin API resources listing). Same test-identity cleanup approach as
 `verify-data-layer.mjs` (deactivate rather than hard-delete); the test machine is
 hard-deleted since nothing FKs to it with `RESTRICT`.
+
+## `verify-cloudinary-lifecycle.mjs`
+
+Live end-to-end check for the full Phase 12 lifecycle: sign → upload to Cloudinary →
+`cloudinary-finalize` → replace → `cloudinary-delete`, covering both entity shapes.
+For a machine (single-image, replace-on-upload): uploads twice, confirms exactly one
+`attachments` row exists throughout and that replacing reuses the same row id *and*
+the same Cloudinary `public_id` (the fixed-slot design — the old asset is overwritten
+in place, never orphaned), then deletes it. For a repair (multi-image): uploads twice,
+confirms **two** distinct rows exist (not a replace), deletes one, confirms the other
+survives untouched, then deletes it too.
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+# Optional — lets the script clean up any Cloudinary asset a failed run left behind
+# (the happy path already deletes everything itself via cloudinary-delete):
+export CLOUDINARY_API_SECRET_FOR_CLEANUP=...
+export CLOUDINARY_API_KEY_FOR_CLEANUP=...
+export CLOUDINARY_CLOUD_NAME_FOR_CLEANUP=...
+node verify-cloudinary-lifecycle.mjs
+```
+
+**Verified 2026-07-28, 11/11 checks passing**, confirmed zero leftover Cloudinary
+assets and zero leftover test rows afterward.

@@ -53,3 +53,78 @@ export async function signParams(
     .join('&');
   return sha1Hex(`${toSign}${apiSecret}`);
 }
+
+/** Maps a Cloudinary asset `format` (e.g. `"jpg"`, `"png"`, `"avif"`) back to the MIME type `attachments.file_type` stores. */
+const FORMAT_TO_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  avif: 'image/avif',
+};
+
+export function formatToMimeType(format: string): string | undefined {
+  return FORMAT_TO_MIME[format.toLowerCase()];
+}
+
+export interface CloudinaryResource {
+  publicId: string;
+  format: string;
+  bytes: number;
+  secureUrl: string;
+}
+
+/**
+ * Looks up a resource by public_id via the Admin API — the *authoritative* source for
+ * what actually landed in Cloudinary. `cloudinary-finalize` uses this instead of
+ * trusting whatever `format`/`bytes`/`secure_url` a client claims, since a client could
+ * otherwise report an oversized or disallowed-format file as if it were compliant.
+ * Returns `undefined` if Cloudinary has no such resource (a 404, not a thrown error —
+ * "does this asset exist" is an expected, checked outcome here, not a failure mode).
+ */
+export async function lookupResource(
+  config: CloudinaryConfig,
+  publicId: string,
+): Promise<CloudinaryResource | undefined> {
+  const url = `https://api.cloudinary.com/v1_1/${config.cloudName}/resources/image/upload/${encodeURIComponent(publicId)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${config.apiKey}:${config.apiSecret}`)}` },
+  });
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    throw new Error(`Cloudinary resource lookup failed with status ${response.status}.`);
+  }
+  const data = await response.json();
+  return {
+    publicId: data.public_id,
+    format: data.format,
+    bytes: data.bytes,
+    secureUrl: data.secure_url,
+  };
+}
+
+/** Deletes a Cloudinary asset by public_id via the signed Admin API `destroy` call. */
+export async function destroyResource(config: CloudinaryConfig, publicId: string): Promise<void> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = await signParams({ public_id: publicId, timestamp }, config.apiSecret);
+
+  const form = new FormData();
+  form.append('public_id', publicId);
+  form.append('api_key', config.apiKey);
+  form.append('timestamp', String(timestamp));
+  form.append('signature', signature);
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/destroy`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    throw new Error(`Cloudinary destroy failed with status ${response.status}.`);
+  }
+  const result = await response.json();
+  // Cloudinary returns 200 with `{ result: "not found" }` for an already-gone asset —
+  // treated as success (idempotent delete), not an error, since the end state (the
+  // asset does not exist) is exactly what was wanted either way.
+  if (result.result !== 'ok' && result.result !== 'not found') {
+    throw new Error(`Cloudinary destroy returned unexpected result: ${result.result}`);
+  }
+}
