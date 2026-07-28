@@ -84,7 +84,11 @@ function NavContent({
             collapsed && 'justify-center px-0',
           )}
         >
-          <SailLogo size="sm" className={cn('shrink-0', collapsed ? 'w-8 h-8' : 'w-10 h-10')} />
+          <SailLogo
+            size="sm"
+            src="/sail-logo-wt.avif"
+            className={cn('shrink-0', collapsed ? 'w-8 h-8' : 'w-10 h-10')}
+          />
           {!collapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-white text-sm tracking-wide leading-tight">SAIL</span>

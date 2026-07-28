@@ -65,7 +65,7 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-sidebar-primary/20 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="relative z-10">
-          <SailLogo size="lg" className="mb-8 items-start" />
+          <SailLogo size="lg" src="/sail-logo-wt.avif" className="mb-8 items-start" />
           {/* Display copy, not the page heading: this panel is `hidden lg:flex`, so an
               <h1> here would leave every screen below `lg` with no level-1 heading. */}
           <p className="mb-4 max-w-md text-4xl font-bold tracking-tight">

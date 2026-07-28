@@ -94,12 +94,15 @@
   --input: 214 20% 88%;
   --ring: 213 85% 28%;
 
-  --sidebar: 215 38% 15%;
+  /* Darker than the dark-theme sidebar (was 15%, lighter than dark mode's 12% — the
+     opposite of the intended relationship): a near-black navy reads more deliberately
+     "always-dark chrome" against the light content panel than a mid-dark tone does. */
+  --sidebar: 215 40% 9%;
   --sidebar-foreground: 210 20% 88%;
-  --sidebar-border: 215 28% 22%;
+  --sidebar-border: 215 28% 18%;
   --sidebar-primary: 213 85% 45%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 215 28% 22%;
+  --sidebar-accent: 215 28% 18%;
   --sidebar-accent-foreground: 210 20% 88%;
   --sidebar-ring: 213 85% 45%;
 
