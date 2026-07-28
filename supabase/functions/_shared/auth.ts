@@ -1,30 +1,32 @@
 /**
  * Caller identity/authorization for Edge Functions.
  *
- * This is a foundation-phase skeleton: `profiles` does not exist until the Phase 9
- * schema lands, so `getAuthorizedCaller` cannot be exercised yet. The shape is fixed
- * now so Phase 10/12 functions can depend on a stable interface — verifying the JWT,
- * then loading the caller's own protected profile row (role, department scope, active
- * state) with the service-role client, never trusting `user_metadata` for authorization
- * (`.agents/plan.md` sections 13–15).
+ * Verifies the JWT, then loads the caller's own protected profile row (role,
+ * department, active state) with the service-role client — never trusting
+ * `user_metadata` for authorization (`.agents/plan.md` sections 13–15). An inactive or
+ * missing profile is rejected here, the same instant a disabled account's `is_active`
+ * flip takes effect for RLS.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { HttpError } from './errors.ts';
 
 export interface AuthorizedCaller {
   userId: string;
-  // Populated once `profiles` exists (Phase 9/10). Left loose here rather than typed
-  // against a table that is not yet migrated.
-  profile: Record<string, unknown>;
+  role: 'officer' | 'supervisor';
+  /** The caller's single home department — a Supervisor's only department. */
+  departmentId: string;
+  /** All departments this caller may read/act in — a Supervisor's is always just [departmentId]. */
+  departmentIds: string[];
 }
 
 /**
  * Service-role client, for the narrow set of things ordinary anon/authenticated access
  * cannot do: verifying an arbitrary caller's JWT and reading protected profile data
- * regardless of that caller's own RLS grants. Never expose this client's key to the
- * frontend bundle — it exists only inside Edge Functions.
+ * regardless of that caller's own RLS grants, and later performing the Cloudinary
+ * Admin API calls / attachment writes that have no client-facing grant. Never expose
+ * this client's key to the frontend bundle — it exists only inside Edge Functions.
  */
-function serviceRoleClient() {
+export function serviceRoleClient() {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) {
@@ -41,12 +43,31 @@ export async function getAuthorizedCaller(req: Request): Promise<AuthorizedCalle
   const token = authHeader.slice('Bearer '.length);
 
   const client = serviceRoleClient();
-  const { data, error } = await client.auth.getUser(token);
-  if (error || !data.user) {
+  const { data: userData, error: userError } = await client.auth.getUser(token);
+  if (userError || !userData.user) {
     throw new HttpError(401, 'Invalid or expired session.');
   }
 
-  // TODO(Phase 10): load `profiles` by `data.user.id` here, reject an inactive or
-  // missing profile, and return its role/department/active fields instead of `{}`.
-  return { userId: data.user.id, profile: {} };
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('role, department_id, is_active')
+    .eq('id', userData.user.id)
+    .maybeSingle();
+  if (profileError) throw new HttpError(500, 'Failed to load caller profile.');
+  if (!profile || !profile.is_active) {
+    throw new HttpError(403, 'This account has no active profile.');
+  }
+
+  const { data: scope, error: scopeError } = await client
+    .from('profile_department_scope')
+    .select('department_id')
+    .eq('profile_id', userData.user.id);
+  if (scopeError) throw new HttpError(500, 'Failed to load caller department scope.');
+
+  return {
+    userId: userData.user.id,
+    role: profile.role,
+    departmentId: profile.department_id,
+    departmentIds: (scope ?? []).map((row) => row.department_id),
+  };
 }

@@ -161,5 +161,28 @@ was also attempted here but had to be dropped: `supabase.auth.signUp()` against 
 `@example.test` address is rejected by GoTrue's email validation, the same
 domain-validation limitation already documented above for `inviteUserByEmail`. Testing
 it properly needs a real deliverable domain, which this environment deliberately does
-not guess at. `disable_signup` itself remains a genuinely open gap needing a personal
-access token or dashboard action — see `.agents/phases.md` Phase 10.
+not guess at. `disable_signup` itself is now resolved — see `.agents/phases.md` Phase 10.
+
+## `verify-cloudinary-sign.mjs`
+
+Live end-to-end check for the Phase 12 `cloudinary-sign` Edge Function: creates a
+throwaway Officer and a real machine, calls the deployed function for a real JWT, and
+actually uploads a tiny real image to Cloudinary with the returned signed params —
+proving the signature Cloudinary computes server-side from what it received matches
+what the function produced, not just that it returns *something*. Also checks a
+disallowed file type is rejected before any signature is computed, and that a machine
+outside the caller's department is rejected.
+
+```sh
+npm install                 # once
+export SUPABASE_URL=...
+export SUPABASE_ANON_KEY=...
+export SUPABASE_SERVICE_ROLE_KEY=...
+export CLOUDINARY_API_SECRET_FOR_CLEANUP=...   # optional — lets the script delete its own test upload
+node verify-cloudinary-sign.mjs
+```
+
+**Verified 2026-07-28, 4/4 checks passing**, test asset cleaned up (confirmed via a
+direct Cloudinary Admin API resources listing). Same test-identity cleanup approach as
+`verify-data-layer.mjs` (deactivate rather than hard-delete); the test machine is
+hard-deleted since nothing FKs to it with `RESTRICT`.

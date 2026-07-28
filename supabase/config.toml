@@ -224,9 +224,15 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
-# Deliberately false, same reasoning as the top-level [auth].enable_signup above: only
-# the operator bootstrap script creates accounts, never public self-signup.
-enable_signup = false
+# Left true: despite the CLI's own comment describing this as just a signup toggle,
+# setting it to false actually disabled the *entire* email/password login method live
+# (external.email: false, confirmed via /auth/v1/settings) — breaking sign-in for
+# every existing account, not just blocking new self-registration. The intended fix
+# (block only new self-signup, never break existing logins) is the top-level
+# [auth].enable_signup above, which alone produces disable_signup: true without this
+# side effect. Confirmed 2026-07-28: with only the top-level flag set, existing
+# accounts can still sign in and disable_signup still reads true.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true

@@ -1255,6 +1255,36 @@ re-verified visually within this pass — or shrinking the bespoke headers to an
 default. Left alone as a minor, non-broken nuance; worth a deliberate decision, not a drive-by
 change.
 
+### Login-screen refinement — 2026-07-28
+
+At the user's request, the `/login` page was refined without changing its mock-auth boundary or
+the two-panel SAIL identity. The form now sits in a more deliberate card with a clear secure-sign-in
+hierarchy; the branding panel gives the product value proposition and scope cues without adding
+fake metrics. The non-functional “remember me for 30 days” checkbox was removed in favour of the
+truthful preview-session note. The demo box is now “Preview access,” clearly explains that selecting
+a role fills the fields, and has keyboard-visible focus styling. The page remains a semantic main
+landmark with one `h1` and a following `h2`.
+
+Verified 2026-07-28 with `pnpm format:check`, `pnpm lint --max-warnings=0`, strict `pnpm
+typecheck`, `pnpm test` (420 tests across 31 files), and `pnpm build`. Live-browser checks passed
+at the normal desktop viewport and a 390×844 mobile viewport; both demo role buttons populated the
+expected credentials and the page had no console errors. The temporary viewport override was reset
+after verification.
+
+### Image-uploader focus-return fix — 2026-07-28
+
+Clicking the Machine image uploader opened the native macOS file picker correctly, but returning
+from it scrolled the page to the top. `ImageUploader` used an `sr-only` file input without a
+positioned upload-zone parent, so the browser restored focus to a one-pixel target at the document
+origin. The native input now fills the visible, `relative` upload zone at zero opacity. It remains
+keyboard-accessible and accepts the same file types, but browser focus now returns at the current
+scroll position. A component regression test asserts this positioning contract.
+
+Verified 2026-07-28 with `pnpm format:check`, `pnpm lint --max-warnings=0`, strict `pnpm
+typecheck`, `pnpm test` (421 tests across 31 files), and `pnpm build`. Live browser inspection on
+`/machines/add` confirmed the input and its upload zone share the same rectangle, at the lower-page
+uploader location, with no console errors.
+
 ### Visual consistency tasks
 
 - [X] Audit page headers, breadcrumbs, widths, spacing, typography, cards, tables, forms, dialogs, buttons, badges, tabs, charts, and feedback. Completed 2026-07-27 with a page-by-page sweep across all ~25 pages: four real defects fixed (a not-found alignment bug, two page-width inconsistencies, and missing `aria-hidden` on decorative icons) — see the evidence section above. Dialogs, tabs, and forms were checked and found already consistent.
@@ -1636,29 +1666,63 @@ still-blocked frontend auth cutover from Phase 10 (needs a real employee roster)
 
 **Likely files:** Edge Functions/shared helpers, attachment hooks, `ImageUploader`, galleries, env docs, tests.
 
+### Environment unblock, 2026-07-28
+
+A personal access token (added to `.env` by the user) unblocked what Phase 9/10 recorded
+as `LegacyPlatformAuthRequiredError`: `supabase link` now works properly (no more
+`--db-url` workaround), and — the part that matters most for this phase — **Edge
+Function deployment works without Docker**, confirmed by deploying and invoking a
+disposable `healthcheck-test` function via `--use-api` (bundles server-side), then
+deleting it. This makes Phase 12 fully achievable end to end, not just written-but-
+unverified.
+
+Two real config regressions were also found and fixed while unblocking, both against
+the live project: `disable_signup` was `true` (two separate toggles,
+`[auth].enable_signup` and a provider-specific `[auth.email].enable_signup`, both had
+to be fixed) — see Phase 10. Then, while fixing the second, disabling
+`[auth.email].enable_signup` turned out to disable the *entire* email/password login
+method (`external.email: false`), not just new signups — caught immediately by a live
+sign-in test failing, reverted to `enable_signup = true`, re-verified `disable_signup:
+true` still holds with existing-account login intact. Recorded so the same mistake
+isn't repeated: only the top-level `[auth].enable_signup` should ever be touched for
+this.
+
 ### Tasks
 
-- [ ] Store Cloudinary/service-role secrets only in Edge Function secret storage.
-- [ ] Implement JWT/profile/permission/parent validation and CORS allowlist.
-- [ ] Implement short-lived constrained signed upload requests.
-- [ ] Connect accepted uploader progress/preview/error/cancel UI.
-- [ ] Verify/finalize upload metadata and attachment association.
-- [ ] Compensate or record cleanup pending when finalization fails.
-- [ ] Implement main/additional machine and repair evidence rules.
-- [ ] Implement new-first replacement and idempotent pending/delete/retry.
-- [ ] Implement/document orphan reconciliation.
-- [ ] Validate content/type/bytes/dimensions/count/folder/public ID.
+- [X] Store Cloudinary/service-role secrets only in Edge Function secret storage. `supabase secrets set CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET`, confirmed present via `supabase secrets list` (values shown hashed, not in plaintext). Never in frontend env, never in source.
+- [X] Implement JWT/profile/permission/parent validation and CORS allowlist. `supabase/functions/_shared/auth.ts`'s `getAuthorizedCaller` now actually loads the caller's `profiles` row (role, department, active state) via the service-role client — the Phase 8 skeleton's `TODO(Phase 10)` is done. `cloudinary-sign/index.ts` checks: JWT valid + active profile; role is Officer or Supervisor (`.agents/plan.md` "Image edit authority"); parent entity exists, is not archived, and its department is in the caller's `departmentIds` — resolved generically across `machine`/`part`/`maintenance`/`repair` via `resolveEntityDepartment`. CORS allowlist unchanged from the Phase 8 `_shared/cors.ts` skeleton (`ALLOWED_ORIGINS` secret).
+- [X] Implement short-lived constrained signed upload requests. `cloudinary-sign/index.ts` validates file type (`image/jpeg`/`image/png`/`image/avif`, matching `attachments_file_type_accepted`) and size (≤5 MB, matching `attachments_file_size_within_limit`) before ever computing a signature; signs a fixed `{timestamp, folder, public_id, overwrite}` param set with the API secret via `_shared/cloudinary.ts`'s `signParams` (SHA-1, Cloudinary's documented algorithm). The signature is scoped to exactly those params — Cloudinary independently recomputes the hash from what it actually receives, so the client cannot add/change a param without invalidating it.
+- [ ] Connect accepted uploader progress/preview/error/cancel UI. Not started — `ImageUploader` still preview-only, per the UI's own "Preview-only image handling" banner.
+- [ ] Verify/finalize upload metadata and attachment association. Not started (`cloudinary-cleanup`/finalize function, next slice of this phase).
+- [ ] Compensate or record cleanup pending when finalization fails. Not started.
+- [x] Implement main/additional machine and repair evidence rules. Structurally in place — `attachments`'s RLS already grants `authenticated` direct `select`/`insert` (department- and role-scoped), designed so the client inserts the `attachments` row itself once Cloudinary confirms the upload; no separate Edge Function needed for the insert itself.
+- [ ] Implement new-first replacement and idempotent pending/delete/retry. Not started — this is `cloudinary-cleanup`, the next function to build (deletes the *old* Cloudinary asset + `attachments` row for an entity only after the new one is confirmed, so a mid-failure never leaves zero images when one exists).
+- [ ] Implement/document orphan reconciliation. Not started.
+- [X] Validate content/type/bytes/dimensions/count/folder/public ID. Type and byte-size validated (see above); one-image-per-entity means "count" is enforced by the fixed `public_id = entityId` + `overwrite=true` (re-uploading always replaces the same Cloudinary asset slot, never accumulates); folder is fixed by the function itself (`sail-plant-maintenance/{entityType}`), never client-supplied, so there is no arbitrary-folder path to validate against. Dimensions: not validated (not required by `.agents/plan.md`'s image policy).
 
 ### Security tests and verification
 
-- [ ] Test unauthorized/IDOR, archived parent, MIME spoof, oversize, forged/expired/replayed signature, arbitrary folder, CORS, repeated delete, and cleanup retry.
-- [ ] Inspect source, bundle, responses, and logs for secret leakage.
-- [ ] Reconcile sandbox Cloudinary assets with attachment rows after upload/replace/delete.
-- [ ] Run all function/frontend/database tests and production build.
+- [X] `cloudinary-sign` deployed and live-tested end to end,
+  `supabase/scripts/verify-cloudinary-sign.mjs`: a disallowed file type (`image/webp`)
+  is rejected with 400 before any signature is computed; a machine outside the
+  caller's department is rejected with 403; a valid request for an in-scope machine
+  returns 200; and the returned signature is actually accepted by Cloudinary for a
+  real upload. **4/4 checks passing**, asset cleaned up afterward (confirmed via a
+  direct Cloudinary Admin API resources listing showing zero leftover test assets).
+  Initially blocked at 3/4: `cloudinary.txt`'s recorded cloud name (`t3okovj9`) didn't
+  belong to the account these API credentials actually reference — confirmed
+  independently of this project's code with a bare `curl` against Cloudinary's API
+  (`"cloud_name mismatch"`), not a bug in the signing logic. The user confirmed the
+  correct cloud name (`bsp-asm`); `.env` and the `CLOUDINARY_CLOUD_NAME` Edge Function
+  secret were both updated and re-verified.
+- [ ] Test unauthorized/IDOR, archived parent, MIME spoof, oversize, forged/expired/replayed signature, arbitrary folder, CORS, repeated delete, and cleanup retry. Partially covered above (IDOR/department-scope, oversize/MIME-spoof-by-declared-type); forged/expired/replayed signature, CORS, repeated delete, and cleanup retry remain for when `cloudinary-cleanup`/delete exist.
+- [ ] Inspect source, bundle, responses, and logs for secret leakage. Not yet done as a dedicated pass — informally, the frontend bundle has never had a Cloudinary secret in it (only `CLOUDINARY_CLOUD_NAME` reaches the browser, via the function's own JSON response, which is not secret) and the Edge Function's error responses never echo the secret (see `_shared/errors.ts`'s generic-message-on-unexpected-error design from Phase 8).
+- [ ] Reconcile sandbox Cloudinary assets with attachment rows after upload/replace/delete. Not a built process yet — one real upload was manually confirmed clean (Admin API resources listing showed zero leftovers after the verify script's own cleanup), but no `attachments`-vs-Cloudinary reconciliation job exists.
+- [ ] Run all function/frontend/database tests and production build. Frontend gates (`format:check`/`lint --max-warnings=0`/`typecheck`/`test`/`build`) all clean, unaffected by this phase's Edge-Function-only changes. No dedicated Edge Function test runner exists (Deno test files would need `supabase functions serve` semantics or a Deno test harness — not yet set up).
 
 **Expected output:** Secure recoverable image lifecycle matching accepted UI. **Definition of done:** Success/failure/retry paths preserve consistency or explicit retry state with no secret exposure. **Suggested commit:** `feat(images): integrate cloudinary edge functions`
 
-- [ ] **Verification checkpoint:** Confirm zero unexpected orphan assets in the non-production environment.
+- [ ] **Verification checkpoint:** Confirm zero unexpected orphan assets in the non-production environment. Reachable now (credential issue resolved); not yet done as a standing check — only exercised once, manually, immediately after the verify script's own upload+cleanup.
 
 ## Phase 13: Full security, testing, documentation, and deployment readiness
 
