@@ -6,7 +6,7 @@ import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { PartForm, type PartFormSubmitResult } from '@/components/parts/PartForm';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
 import { useMockRepository } from '@/hooks/use-mock-repository';

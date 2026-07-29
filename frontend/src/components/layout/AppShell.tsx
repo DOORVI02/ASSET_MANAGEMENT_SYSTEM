@@ -1,9 +1,8 @@
 import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { RoleDemo } from '../shared/RoleDemo';
 import { useLocation } from 'wouter';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useDepartment } from '@/hooks/use-department';
 import { Loader2 } from 'lucide-react';
 import { registeredRoutes } from '@/lib/routes';
@@ -22,9 +21,14 @@ const publicRoutes: string[] = [
 export function AppShell({ children }: AppShellProps) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { user, isLoading } = useAuth();
-  const { current, canChoose } = useDepartment();
+  const { user, isLoading: sessionLoading } = useAuth();
+  const { current, canChoose, isLoading: departmentsLoading } = useDepartment();
   const [location, setLocation] = useLocation();
+
+  // The shell is not ready until *both* questions are answered: who is signed in, and
+  // which departments they may reach. Gating on the session alone would render scoped
+  // pages with no department in context for the length of the department fetch.
+  const isLoading = sessionLoading || departmentsLoading;
 
   // Recovery is reached from an email link by a signed-out user, so it has to sit
   // alongside login and forgot-password rather than behind the auth guard.
@@ -38,7 +42,7 @@ export function AppShell({ children }: AppShellProps) {
 
   // An Officer with several departments must pick one before any scoped page renders,
   // otherwise a list would have no department to scope to.
-  const needsDepartment = Boolean(user) && !current && canChoose;
+  const needsDepartment = Boolean(user) && !isLoading && !current && canChoose;
   React.useEffect(() => {
     if (needsDepartment && location !== registeredRoutes.departments) {
       setLocation(registeredRoutes.departments);
@@ -94,8 +98,6 @@ export function AppShell({ children }: AppShellProps) {
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
-
-      <RoleDemo />
     </div>
   );
 }

@@ -1,49 +1,87 @@
-import { describe, expect, it } from 'vitest';
-import { resolveScopeIds } from './department-scope';
-import { mockDepartments, mockUsers } from './mock-data';
-import type { UserProfile } from './types';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  DEPARTMENT_STORAGE_KEY,
+  clearStoredDepartmentId,
+  readStoredDepartmentId,
+  writeStoredDepartmentId,
+} from './department-scope';
 
-const officer = mockUsers['officer@sail.in'];
-const supervisor = mockUsers['supervisor@sail.in'];
+/**
+ * This file used to test `resolveScopeIds`, which derived a user's authorized department
+ * ids by matching profile department *names* against a local department list. That function
+ * was deleted in the 2026-07-29 backend cutover: RLS on `departments` returns exactly the
+ * caller's scope, so `DepartmentProvider` uses the query result directly.
+ *
+ * The behaviours those tests guarded are now enforced where they belong and verified
+ * against the real database, not asserted against fixtures:
+ *
+ * - "an officer sees only their associated departments" and "a supervisor is pinned to
+ *   one" — `supabase/scripts/verify-supervisor-scope-rule.mjs`, plus the real sign-in check
+ *   run when the first two accounts were provisioned (the officer's unfiltered
+ *   `select * from departments` returned 4 rows, the supervisor's returned 1).
+ * - "a supervisor cannot hold several departments" — a database trigger, which is also
+ *   where the 2026-07-29 batch-insert bypass was found and fixed.
+ *
+ * What remains here is the part that is genuinely browser-side: persisting the Officer's
+ * chosen department, and surviving a `localStorage` that throws.
+ */
+afterEach(() => {
+  window.localStorage.clear();
+  vi.restoreAllMocks();
+});
 
-describe('department scope resolution', () => {
-  it('gives an officer only their associated departments, not every department', () => {
-    const ids = resolveScopeIds(officer, mockDepartments);
+describe('stored department selection', () => {
+  it('round-trips a selected department id', () => {
+    writeStoredDepartmentId('dept-1');
 
-    expect(ids.length).toBe(officer.departmentScope.length);
-    expect(ids.length).toBeLessThan(mockDepartments.length);
+    expect(readStoredDepartmentId()).toBe('dept-1');
+    expect(window.localStorage.getItem(DEPARTMENT_STORAGE_KEY)).toBe('dept-1');
   });
 
-  it('resolves officer scope names to matching department ids', () => {
-    const ids = resolveScopeIds(officer, mockDepartments);
-    const names = ids.map((id) => mockDepartments.find((d) => d.id === id)?.name);
-
-    expect(new Set(names)).toEqual(new Set(officer.departmentScope));
+  it('reports no selection when nothing has been stored', () => {
+    expect(readStoredDepartmentId()).toBeNull();
   });
 
-  it('pins a supervisor to exactly their assigned department', () => {
-    const ids = resolveScopeIds(supervisor, mockDepartments);
-    const assigned = mockDepartments.find((d) => d.name === supervisor.department);
+  it('clears a selection', () => {
+    writeStoredDepartmentId('dept-1');
+    clearStoredDepartmentId();
 
-    expect(ids).toEqual([assigned?.id]);
+    expect(readStoredDepartmentId()).toBeNull();
   });
 
-  it('pins a supervisor to one department even if the scope lists several', () => {
-    const greedy: UserProfile = {
-      ...supervisor,
-      departmentScope: mockDepartments.map((d) => d.name),
-    };
+  it('overwrites a previous selection rather than accumulating', () => {
+    writeStoredDepartmentId('dept-1');
+    writeStoredDepartmentId('dept-2');
 
-    expect(resolveScopeIds(greedy, mockDepartments)).toHaveLength(1);
+    expect(readStoredDepartmentId()).toBe('dept-2');
   });
 
-  it('returns no departments for a signed-out user', () => {
-    expect(resolveScopeIds(null, mockDepartments)).toEqual([]);
+  /**
+   * Storage throws in a Safari private window and whenever the origin's quota is full.
+   * Persistence is a convenience; losing it must not take the app down with it, because
+   * the selection still applies for the current session either way.
+   */
+  it('survives a localStorage that throws on read', () => {
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+
+    expect(readStoredDepartmentId()).toBeNull();
   });
 
-  it('returns no departments when a name matches nothing', () => {
-    const orphan: UserProfile = { ...officer, departmentScope: ['Nonexistent Department'] };
+  it('survives a localStorage that throws on write', () => {
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
 
-    expect(resolveScopeIds(orphan, mockDepartments)).toEqual([]);
+    expect(() => writeStoredDepartmentId('dept-1')).not.toThrow();
+  });
+
+  it('survives a localStorage that throws on clear', () => {
+    vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+
+    expect(() => clearStoredDepartmentId()).not.toThrow();
   });
 });

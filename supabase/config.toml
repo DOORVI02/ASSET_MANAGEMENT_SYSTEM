@@ -158,11 +158,30 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+#
+# This is where every emailed link points. It was left at the CLI's placeholder
+# (`127.0.0.1:3000`) until 2026-07-29, which is not even this app's dev port — Vite serves
+# on 5173 — so an invite or recovery link would have landed on nothing.
+#
+# **Add the deployed origin here before anyone uses password recovery in production.**
+# Supabase validates `redirectTo` against this value and `additional_redirect_urls`, and
+# silently falls back to `site_url` when it doesn't match. So a production user clicking
+# "reset password" would be sent to localhost — the request succeeds, the mail arrives, and
+# the link is useless. `frontend/src/lib/supabase/auth.ts` builds `redirectTo` from
+# `window.location.origin` precisely so that adding the origin here is the only step needed.
+site_url = "http://localhost:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Exact match, no wildcards: the recovery route itself must be listed, not just the origin.
+# Vercel preview deployments get a new hostname per deploy and would each need adding, which
+# is why recovery is only expected to work on the origins listed here.
+additional_redirect_urls = [
+  "http://localhost:5173",
+  "http://localhost:5173/reset-password",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5173/reset-password",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -185,10 +204,17 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+# Raised from 6 and left unconstrained until 2026-07-29, when it was aligned with the policy
+# the app has always *stated*: `frontend/src/lib/password-reset.ts` tells users "at least 10
+# characters, with upper and lower case letters and a number" and refuses anything less. But
+# that check only ran in the browser, so the server would happily accept a 6-character
+# lowercase password set through any other path. The stricter half was decorative. These two
+# values are now the enforcement, and the frontend copy is the description of them — change
+# both together.
+minimum_password_length = 10
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
-password_requirements = ""
+password_requirements = "lower_upper_letters_digits"
 
 # Configure passkey sign-ins.
 # [auth.passkey]
@@ -202,7 +228,13 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Raised from the CLI default of 2 on 2026-07-29. Two per hour is a sensible default only
+# while no SMTP server is configured; with real recovery mail flowing it is a live outage
+# waiting to happen — the third person to forget their password in an hour gets nothing,
+# and Supabase returns a rate-limit error the app can only report, not work around. 30/hour
+# is comfortably below Gmail's own ~500/day app-password ceiling while covering a real
+# day's invites and recoveries.
+email_sent = 30
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -241,7 +273,10 @@ enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "1s"
+# Raised from 1s on 2026-07-29. At 1s, holding down a "resend" button burns the hourly email
+# allowance in seconds and, past that, real Gmail send quota — a denial of service against
+# this project's own password recovery, available to anyone who can reach the login page.
+max_frequency = "60s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).

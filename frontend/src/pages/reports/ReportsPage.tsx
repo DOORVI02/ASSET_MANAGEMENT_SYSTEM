@@ -21,7 +21,7 @@ import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { ResponsiveRecordList } from '@/components/shared/ResponsiveRecordList';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
 import { useMockRepository } from '@/hooks/use-mock-repository';

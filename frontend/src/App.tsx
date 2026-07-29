@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
-import { AuthProvider } from '@/lib/mock-auth';
+import { AuthProvider } from '@/lib/auth-context';
 import { DepartmentProvider } from '@/lib/department-context';
 import { NotificationProvider } from '@/lib/notification-context';
 import { ThemeProvider } from '@/lib/theme-context';

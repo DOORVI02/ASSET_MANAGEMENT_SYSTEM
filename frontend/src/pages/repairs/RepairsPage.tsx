@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Pagination } from '@/components/shared/Pagination';
 import { ResponsiveRecordList } from '@/components/shared/ResponsiveRecordList';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { repairDetailPath, repairsPath, registeredRoutes } from '@/lib/routes';
 import { formatDate } from '@/lib/utils';

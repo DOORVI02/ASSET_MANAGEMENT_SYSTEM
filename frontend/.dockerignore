@@ -1,0 +1,23 @@
+# Keeps the build context small and, more importantly, keeps local state out of the image.
+# `.env*` is listed first: it holds the service-role key and the Cloudinary secret, neither
+# of which may ever reach a container image — the build only needs the two public `VITE_*`
+# values, and those arrive as build args (see Dockerfile).
+.env
+.env.*
+!.env.example
+
+node_modules
+dist
+.pnpm-store
+
+# Test and report output — regenerated, never shipped.
+playwright-report
+test-results
+coverage
+tsconfig.tsbuildinfo
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+README.md

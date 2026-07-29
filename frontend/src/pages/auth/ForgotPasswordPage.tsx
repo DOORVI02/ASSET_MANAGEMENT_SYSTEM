@@ -6,23 +6,39 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Link } from 'wouter';
-import { previewResetLink } from '@/lib/password-reset';
+import { requestPasswordRecovery } from '@/lib/supabase/auth';
 import { registeredRoutes } from '@/lib/routes';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
     setIsSubmitting(true);
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsSubmitting(false);
-    setIsSuccess(true);
+    setError(null);
+    try {
+      await requestPasswordRecovery(email, registeredRoutes.resetPassword);
+      // Shown whether or not the address is on the roster — Supabase reports success either
+      // way, and branching here would turn this form into a way to test whether someone
+      // has an account. The confirmation copy below is worded to match.
+      setIsSuccess(true);
+    } catch (requestError) {
+      // Only genuine transport/rate-limit failures reach here. Those are worth showing:
+      // Supabase rate-limits recovery mail per address, and a silent no-op would look
+      // identical to a delivered email that never arrives.
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'The reset email could not be sent. Try again in a moment.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -49,13 +65,21 @@ export default function ForgotPasswordPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@sail.in"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isSubmitting}
                   required
                 />
               </div>
+
+              {error ? (
+                <p
+                  role="alert"
+                  className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive"
+                >
+                  {error}
+                </p>
+              ) : null}
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? (
@@ -83,36 +107,6 @@ export default function ForgotPasswordPage() {
               Try another email
             </Button>
 
-            {/* No mail is sent during the preview, so the recovery screen would otherwise
-                be unreachable for review. Removed when Supabase sends the real email. */}
-            <div className="mt-6 rounded-md border border-dashed p-3 text-left">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Preview only
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                No email is sent yet. Open the recovery screen directly:
-              </p>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs font-medium">
-                <Link href={previewResetLink('valid')} className="text-primary hover:underline">
-                  Valid link
-                </Link>
-                <Link href={previewResetLink('expired')} className="text-primary hover:underline">
-                  Expired link
-                </Link>
-                <Link
-                  href={`${registeredRoutes.resetPassword}?token=broken`}
-                  className="text-primary hover:underline"
-                >
-                  Malformed link
-                </Link>
-                <Link
-                  href={registeredRoutes.resetPassword}
-                  className="text-primary hover:underline"
-                >
-                  Missing token
-                </Link>
-              </div>
-            </div>
           </div>
         )}
 

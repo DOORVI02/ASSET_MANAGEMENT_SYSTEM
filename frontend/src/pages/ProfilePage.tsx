@@ -1,7 +1,7 @@
 import { Link } from 'wouter';
 import { KeyRound } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

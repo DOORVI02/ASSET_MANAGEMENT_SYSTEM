@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { mockRepository } from '@/lib/mock-repository';
 import { can } from '@/lib/permissions';
 import {

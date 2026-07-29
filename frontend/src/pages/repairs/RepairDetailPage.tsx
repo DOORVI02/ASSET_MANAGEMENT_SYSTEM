@@ -19,7 +19,7 @@ import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { ImageUploader } from '@/components/shared/ImageUploader';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { mockRepository } from '@/lib/mock-repository';
 import { can } from '@/lib/permissions';
 import {

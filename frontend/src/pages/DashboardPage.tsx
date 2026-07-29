@@ -30,7 +30,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { cn, formatDateTime } from '@/lib/utils';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useDepartment } from '@/hooks/use-department';
 import { useMockRepository } from '@/hooks/use-mock-repository';
 import { EmptyState } from '@/components/shared/EmptyState';

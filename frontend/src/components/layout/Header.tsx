@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { useDepartment } from '@/hooks/use-department';
 import { useNotifications } from '@/hooks/use-notifications';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const { current, canChoose } = useDepartment();
   const { items: notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [location, setLocation] = useLocation();
@@ -253,7 +253,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuItem
-                onClick={logout}
+                onClick={() => void signOut()}
                 className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-700 dark:focus:bg-red-950/50"
               >
                 <LogOut className="mr-2 h-4 w-4" />

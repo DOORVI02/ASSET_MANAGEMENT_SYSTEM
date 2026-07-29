@@ -1,31 +1,16 @@
-import type { Department, UserProfile } from './types';
+/**
+ * Persistence for the Officer's chosen department.
+ *
+ * `resolveScopeIds` used to live here: it derived a user's authorized department ids by
+ * matching `UserProfile.departmentScope` (names) against a locally held department list.
+ * It was removed in the 2026-07-29 backend cutover — RLS on `departments` already returns
+ * exactly the caller's scope, so `DepartmentProvider` reads the ids from the query result
+ * instead of recomputing them from names. Two sources that could disagree became one that
+ * cannot.
+ */
 
 /** localStorage key holding the Officer's chosen department so it survives logout. */
 export const DEPARTMENT_STORAGE_KEY = 'sail_department';
-
-/**
- * Resolves a user's authorized department ids.
- *
- * `UserProfile.departmentScope` holds department *names* today. Names are resolved to
- * ids here so the rest of the app works in ids. Normalizing the profile contract to
- * ids belongs to the schema work in Phase 9.
- *
- * A Supervisor is pinned to exactly one department, their assigned one, regardless of
- * what `departmentScope` happens to contain.
- */
-export function resolveScopeIds(user: UserProfile | null, departments: Department[]): string[] {
-  if (!user) return [];
-
-  if (user.role === 'supervisor') {
-    const assigned = departments.find((department) => department.name === user.department);
-    return assigned ? [assigned.id] : [];
-  }
-
-  const names = new Set(user.departmentScope);
-  return departments
-    .filter((department) => names.has(department.name))
-    .map((department) => department.id);
-}
 
 export function readStoredDepartmentId(): string | null {
   try {

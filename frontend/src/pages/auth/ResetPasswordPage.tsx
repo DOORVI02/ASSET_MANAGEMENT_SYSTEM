@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useSearch } from 'wouter';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'wouter';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { SailLogo } from '@/components/brand/SailLogo';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
@@ -8,20 +8,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   PASSWORD_MIN_LENGTH,
-  classifyResetToken,
-  consumeResetToken,
-  parseResetToken,
+  classifyRecoveryLink,
   validateNewPassword,
-  type ResetTokenState,
+  type RecoveryLinkState,
 } from '@/lib/password-reset';
+import { getSupabaseClient } from '@/lib/supabase';
+import { updatePassword, signOut } from '@/lib/supabase/auth';
 import { registeredRoutes } from '@/lib/routes';
 
 /**
- * Guidance per invalid-token state. Every message is deliberately generic about whether
- * an account exists — the same rule the login and forgot-password screens follow.
+ * Guidance per unusable-link state. Every message is deliberately generic about whether an
+ * account exists — the same rule the login and forgot-password screens follow.
  */
-const invalidTokenCopy: Record<
-  Exclude<ResetTokenState, 'valid'>,
+const unusableLinkCopy: Record<
+  Exclude<RecoveryLinkState, 'pending'> | 'failed',
   { title: string; description: string }
 > = {
   missing: {
@@ -29,29 +29,41 @@ const invalidTokenCopy: Record<
     description:
       'This page is opened from the link in a password recovery email. Request one to continue.',
   },
-  malformed: {
-    title: 'This link is not readable',
+  invalid: {
+    title: 'This link is not usable',
     description:
-      'The recovery link looks incomplete, which usually means it was cut short by an email client. Request a fresh one.',
+      'The recovery link could not be read, which usually means it was cut short by an email client. Request a fresh one.',
   },
   expired: {
-    title: 'This link has expired',
-    description: 'Recovery links are short-lived for security. Request a new one to continue.',
-  },
-  used: {
-    title: 'This link has already been used',
+    title: 'This link is no longer valid',
     description:
-      'A password was already set with this link. Sign in with the new password, or request another link.',
+      'Recovery links are short-lived and can only be used once, so this one has either expired or already set a password. Request a new one to continue.',
+  },
+  failed: {
+    title: 'This link could not be verified',
+    description:
+      'The link carried a recovery request, but no session came back from it. Request a new link and open it in the same browser.',
   },
 };
 
-export default function ResetPasswordPage() {
-  const searchString = useSearch();
-  const token = useMemo(() => new URLSearchParams(searchString).get('token'), [searchString]);
+/**
+ * The screen's own view of the recovery attempt.
+ *
+ * `checking` exists because a usable link is not usable *immediately*: supabase-js reads the
+ * token out of the URL and exchanges it asynchronously on load. Offering the form before
+ * that finishes would let someone submit with no session and get an error for a link that
+ * was fine.
+ */
+type ScreenState = Exclude<RecoveryLinkState, 'pending'> | 'checking' | 'ready' | 'failed';
 
-  // Classified once per render rather than stored, so an expiry that lapses while the
-  // page is open is caught on submit as well as on load.
-  const state = classifyResetToken(token);
+export default function ResetPasswordPage() {
+  const [screenState, setScreenState] = useState<ScreenState>(() => {
+    const initial = classifyRecoveryLink({
+      hash: window.location.hash,
+      search: window.location.search,
+    });
+    return initial === 'pending' ? 'checking' : initial;
+  });
 
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -59,6 +71,43 @@ export default function ResetPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
+
+  useEffect(() => {
+    if (screenState !== 'checking') return;
+
+    const client = getSupabaseClient();
+    let settled = false;
+
+    // Two ways in, because either can win the race on load: the PASSWORD_RECOVERY event, or
+    // a session that supabase-js had already established before this component mounted.
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN')) {
+        settled = true;
+        setScreenState('ready');
+      }
+    });
+
+    void client.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        settled = true;
+        setScreenState('ready');
+      }
+    });
+
+    // If neither produced a session, the link carried something that didn't work. Reporting
+    // that is better than leaving a spinner up forever, which is what an unbounded wait on
+    // an event that will never fire would do.
+    const timeout = window.setTimeout(() => {
+      if (!settled) setScreenState('failed');
+    }, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      window.clearTimeout(timeout);
+    };
+  }, [screenState]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -69,22 +118,26 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    // Re-checked at submit time: the link may have expired while the form was open.
-    const currentState = classifyResetToken(token);
-    if (currentState !== 'valid') {
-      setError('This recovery link is no longer valid. Request a new one.');
-      return;
-    }
-
     setError(null);
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    const parsed = parseResetToken(token);
-    if (parsed) consumeResetToken(parsed.nonce);
-
-    setIsSubmitting(false);
-    setIsDone(true);
+    try {
+      await updatePassword(password);
+      // The recovery session is ended deliberately. It was issued to change a credential,
+      // not to use the app, and requiring one real sign-in with the new password is the only
+      // confirmation available that it was actually stored.
+      await signOut().catch(() => undefined);
+      setIsDone(true);
+    } catch (updateError) {
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : 'The password could not be updated. Request a new recovery link and try again.',
+      );
+    } finally {
+      setIsSubmitting(false);
+      setPassword('');
+      setConfirmation('');
+    }
   };
 
   return (
@@ -102,23 +155,33 @@ export default function ResetPasswordPage() {
             </div>
             <h1 className="mb-2 text-xl font-bold text-foreground">Password updated</h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              Your password has been set. Sign in with it to continue. Other sessions will be signed
-              out once this is connected to real authentication.
+              Your password has been set and this recovery link is now spent. Sign in with the new
+              password to continue.
             </p>
             <Link href={registeredRoutes.login}>
               <Button className="w-full">Go to sign in</Button>
             </Link>
           </div>
-        ) : state !== 'valid' ? (
+        ) : screenState === 'checking' ? (
+          <div className="py-8 text-center">
+            <Loader2
+              className="mx-auto mb-4 h-6 w-6 animate-spin text-primary"
+              aria-hidden="true"
+            />
+            <p role="status" className="text-sm text-muted-foreground">
+              Verifying your recovery link…
+            </p>
+          </div>
+        ) : screenState !== 'ready' ? (
           <div className="py-4 text-center" role="alert">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               <AlertTriangle size={24} aria-hidden="true" />
             </div>
             <h1 className="mb-2 text-xl font-bold text-foreground">
-              {invalidTokenCopy[state].title}
+              {unusableLinkCopy[screenState].title}
             </h1>
             <p className="mb-6 text-sm text-muted-foreground">
-              {invalidTokenCopy[state].description}
+              {unusableLinkCopy[screenState].description}
             </p>
             <Link href={registeredRoutes.forgotPassword}>
               <Button className="w-full">Request a new link</Button>

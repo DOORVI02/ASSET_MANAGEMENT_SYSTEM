@@ -10,7 +10,7 @@ import {
   MaintenancePlanForm,
   type MaintenancePlanFormSubmitResult,
 } from '@/components/maintenance/MaintenancePlanForm';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
 import { useMockRepository } from '@/hooks/use-mock-repository';

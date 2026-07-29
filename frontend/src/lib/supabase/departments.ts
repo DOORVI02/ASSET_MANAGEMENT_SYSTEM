@@ -8,6 +8,47 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { mapDepartmentRow } from './mappers';
 import type { AccessScope, Department, DepartmentSummary } from '@/lib/types';
 
+/**
+ * Every department the signed-in user may see — which is exactly what RLS returns for a
+ * bare `select` on `departments`, since the policy joins through
+ * `profile_department_scope` (`20260727000013_rls_policies_and_grants.sql`). Confirmed
+ * live 2026-07-29: the officer account got its four departments and the supervisor account
+ * got its one, from the same unfiltered query.
+ *
+ * This is what makes the caller's department scope *server-derived*. The preview computed
+ * it in the browser by matching `UserProfile.departmentScope` (names) against a local
+ * department list, which could disagree with what the database would actually return —
+ * silently showing or hiding a department. Here there is nothing to disagree with.
+ *
+ * Machine counts come from a second scoped read rather than a view, matching
+ * `listDepartmentsInScope` below; `Department.machineCount` is derived, never stored
+ * (migration `20260727000002` says so).
+ */
+export async function listAccessibleDepartments(): Promise<Department[]> {
+  const client = getSupabaseClient();
+
+  const [{ data: departments, error: departmentsError }, { data: machines, error: machinesError }] =
+    await Promise.all([
+      client.from('departments').select('*').order('sort_order', { ascending: true }),
+      client.from('machines').select('id, department_id'),
+    ]);
+
+  if (departmentsError) throw departmentsError;
+  if (machinesError) throw machinesError;
+
+  const countByDepartment = new Map<string, number>();
+  for (const machine of machines ?? []) {
+    countByDepartment.set(
+      machine.department_id,
+      (countByDepartment.get(machine.department_id) ?? 0) + 1,
+    );
+  }
+
+  return (departments ?? []).map((row) =>
+    mapDepartmentRow(row, countByDepartment.get(row.id) ?? 0),
+  );
+}
+
 export async function listDepartmentsInScope(scope: AccessScope): Promise<Department[]> {
   if (scope.departmentIds.length === 0) return [];
   const client = getSupabaseClient();

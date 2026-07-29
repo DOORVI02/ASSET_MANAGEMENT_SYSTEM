@@ -13,7 +13,7 @@ import { MachineActivityTimeline } from '@/components/machines/MachineActivityTi
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { DUE_SOON_WINDOW_DAYS, isDueSoon, isOverdue } from '@/lib/maintenance-window';
 import { maintenanceDueState } from '@/lib/maintenance-record';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { mockRepository } from '@/lib/mock-repository';
 import { useMockRepository } from '@/hooks/use-mock-repository';

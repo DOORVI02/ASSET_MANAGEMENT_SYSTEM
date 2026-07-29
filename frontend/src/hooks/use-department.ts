@@ -10,6 +10,13 @@ export interface DepartmentContextValue {
   scope: AccessScope;
   /** Officers choose between departments; a Supervisor has only one. */
   canChoose: boolean;
+  /**
+   * True while the accessible-department list is still being fetched. The shell needs this
+   * to tell "this Officer hasn't picked a department" apart from "we don't know their
+   * departments yet" — the two look identical from `current === null` alone, and treating
+   * the second as the first bounces the user to the selection screen on every load.
+   */
+  isLoading: boolean;
   selectDepartment: (departmentId: string) => void;
   clearDepartment: () => void;
 }

@@ -7,7 +7,7 @@ import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { ImageUploader } from '@/components/shared/ImageUploader';
 import { Button } from '@/components/ui/button';
 import { MachineForm, type MachineFormSubmitResult } from '@/components/machines/MachineForm';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { mockRepository } from '@/lib/mock-repository';
 import { useMockRepository } from '@/hooks/use-mock-repository';

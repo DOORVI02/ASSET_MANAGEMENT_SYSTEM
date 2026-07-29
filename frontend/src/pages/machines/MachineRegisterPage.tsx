@@ -12,7 +12,7 @@ import { DUE_SOON_WINDOW_DAYS, isDueSoon, isOverdue } from '@/lib/maintenance-wi
 import { Link, useLocation, useSearch } from 'wouter';
 import { Plus, Filter, Eye, Edit, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';

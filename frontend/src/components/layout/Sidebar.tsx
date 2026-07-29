@@ -2,7 +2,7 @@ import React from 'react';
 import { useLocation, Link } from 'wouter';
 import { cn } from '@/lib/utils';
 import { SailLogo } from '../brand/SailLogo';
-import { useAuth } from '@/lib/mock-auth';
+import { useAuth } from '@/hooks/use-auth';
 import {
   LayoutDashboard,
   Settings2,
@@ -72,7 +72,7 @@ function NavContent({
   navLabel: string;
 }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
 
   return (
     <>
@@ -191,7 +191,7 @@ function NavContent({
               </div>
             </Link>
             <button
-              onClick={logout}
+              onClick={() => void signOut()}
               className="shrink-0 rounded-md p-1.5 text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
               title="Log out"
               aria-label="Log out"
@@ -201,7 +201,7 @@ function NavContent({
           </div>
         ) : (
           <button
-            onClick={logout}
+            onClick={() => void signOut()}
             className="flex w-full justify-center rounded-md p-1.5 text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             title="Log out"
             aria-label="Log out"
