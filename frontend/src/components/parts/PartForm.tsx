@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Loader2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,15 @@ interface PartFormProps {
   /** Machines the user may fit parts to, already department-scoped. */
   machines: Machine[];
   /** Case-insensitive serial uniqueness check across all parts, excluding this one. */
-  isSerialTaken: (serialNumber: string) => boolean;
+  /**
+   * Advisory duplicate check, run against the server as the user types.
+   *
+   * Async since the 2026-07-29 cutover — the answer comes from the database now, not an
+   * in-memory list. The authoritative check is the unique constraint, surfaced by
+   * `createPart`/`updatePart` as a submit error on this field; any check-then-insert has a
+   * window a concurrent database can lose. Mirrors `MachineForm`'s `isCodeTaken`.
+   */
+  isSerialTaken: (serialNumber: string) => Promise<boolean>;
   onSubmit: (values: PartFormValues) => Promise<PartFormSubmitResult>;
   onCancel: () => void;
 }
@@ -57,10 +65,27 @@ export function PartForm({
   const isDirty = useMemo(() => hasPartFormChanges(values, initialValues), [values, initialValues]);
   const validationErrors = useMemo(() => validatePartForm(values), [values]);
 
-  const duplicateSerial = useMemo(() => {
-    const trimmed = (values.serialNumber ?? '').trim();
-    return trimmed.length > 0 && isSerialTaken(trimmed);
-  }, [values.serialNumber, isSerialTaken]);
+  // Stores the serial found taken rather than a boolean, so a slow answer for an edited
+  // value stops matching instead of standing. Same shape as MachineForm's duplicate check.
+  const [takenSerial, setTakenSerial] = useState<string | null>(null);
+  const trimmedSerial = (values.serialNumber ?? '').trim();
+  const duplicateSerial = takenSerial !== null && takenSerial === trimmedSerial;
+
+  useEffect(() => {
+    if (trimmedSerial.length === 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void isSerialTaken(trimmedSerial)
+        .then((taken) => {
+          if (!cancelled && taken) setTakenSerial(trimmedSerial);
+        })
+        .catch(() => undefined);
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [trimmedSerial, isSerialTaken]);
 
   const setField = useCallback(
     <K extends keyof PartFormValues>(field: K, value: PartFormValues[K]) => {

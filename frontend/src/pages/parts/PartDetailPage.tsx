@@ -24,8 +24,17 @@ import { fieldAria } from '@/lib/form-aria';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  archivePart,
+  getPartInScope,
+  listPartReplacements,
+  replacePart,
+  restorePart,
+} from '@/lib/supabase/parts';
+import { listDisplayNames } from '@/lib/supabase/profiles';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { partLifeState, replacementDueDate } from '@/lib/part-life';
 import { partReplacementSchema, type PartReplacementValues } from '@/lib/part-form';
 import { toDateInputValue } from '@/lib/machine-form';
@@ -37,21 +46,48 @@ export default function PartDetailPage() {
   const [, params] = useRoute(registeredRoutes.partDetail);
   const { user } = useAuth();
   const { scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<FeedbackModel | null>(null);
   const partId = params?.id;
+  const enabled = Boolean(partId) && scope.departmentIds.length > 0;
 
-  const part = useMemo(
-    () => (partId ? repository.getPartInScope(partId, scope) : undefined),
-    [partId, repository, scope],
+  const { data: part, isPending } = useQuery({
+    queryKey: queryKeys.parts.detail(partId ?? ''),
+    queryFn: () => getPartInScope(partId ?? '', scope),
+    enabled,
+  });
+
+  const { data: replacements = [] } = useQuery({
+    queryKey: queryKeys.parts.replacements(partId ?? ''),
+    queryFn: () => listPartReplacements(partId ?? ''),
+    enabled,
+  });
+
+  /**
+   * Names for the actors on the replacement history, via the `profile_display_names` RPC —
+   * `profiles` is readable only for your own row. An id outside your department scope is
+   * absent from the map and falls back, which is the access rule showing through rather
+   * than missing data.
+   */
+  const actorIds = useMemo(
+    () => [...new Set(replacements.map((row) => row.performedBy))],
+    [replacements],
   );
-  const replacements = useMemo(
-    () => (partId ? repository.listPartReplacements(partId) : []),
-    [partId, repository],
-  );
-  const users = useMemo(() => repository.listUsers(), [repository]);
+  const { data: actorNames } = useQuery({
+    queryKey: [...queryKeys.profiles.names(), actorIds],
+    queryFn: () => listDisplayNames(actorIds),
+    enabled: actorIds.length > 0,
+  });
 
   const canWrite = can(user, 'parts:edit');
+
+  if (isPending) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <LoadingState label="Loading part…" />
+      </div>
+    );
+  }
 
   if (!part) {
     return (
@@ -73,11 +109,12 @@ export default function PartDetailPage() {
 
   const dueDate = replacementDueDate(part);
   const lifeState = partLifeState(part);
-  const actorName = (actorId: string) =>
-    users.find((candidate) => candidate.id === actorId)?.name ?? 'System';
+  const actorName = (actorId: string) => actorNames?.get(actorId) ?? 'Another user';
 
-  const handleRemove = () => {
-    const result = mockRepository.archivePart(part.id, user?.id ?? 'unknown');
+  const handleRemove = async () => {
+    // No actor argument: the audit trigger records `auth.uid()` server-side.
+    const result = await archivePart(part.id);
+    await queryClient.invalidateQueries({ queryKey: ['parts'] });
     setFeedback(
       result.ok
         ? {
@@ -90,8 +127,9 @@ export default function PartDetailPage() {
     );
   };
 
-  const handleRestore = () => {
-    const result = mockRepository.restorePart(part.id, user?.id ?? 'unknown');
+  const handleRestore = async () => {
+    const result = await restorePart(part.id);
+    await queryClient.invalidateQueries({ queryKey: ['parts'] });
     setFeedback(
       result.ok
         ? {
@@ -284,7 +322,7 @@ function ReplaceDialog({
   });
   const [errors, setErrors] = useState<Partial<Record<keyof PartReplacementValues, string>>>({});
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
     const parsed = partReplacementSchema.safeParse(values);
@@ -301,7 +339,7 @@ function ReplaceDialog({
     }
 
     setErrors({});
-    const result = mockRepository.replacePart(partId, parsed.data, actorId);
+    const result = await replacePart(partId, parsed.data, actorId);
 
     if (!result.ok) {
       setErrors(result.reason === 'duplicate_serial' ? { newSerialNumber: result.message } : {});

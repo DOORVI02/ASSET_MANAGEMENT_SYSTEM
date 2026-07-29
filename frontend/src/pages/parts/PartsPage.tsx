@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useSearch } from 'wouter';
 import { ChevronDown, ChevronUp, Eye, Filter, Package, Plus, X } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -13,7 +14,10 @@ import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { getPartsSummary, listAllPartsInScope } from '@/lib/supabase/parts';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { partLifeState, replacementDueDate } from '@/lib/part-life';
 import { DUE_SOON_WINDOW_DAYS } from '@/lib/maintenance-window';
 import { formatDate } from '@/lib/utils';
@@ -37,7 +41,6 @@ function parseLifeFilters(raw: string | null): PartLifeState[] {
 export default function PartsPage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState('');
@@ -57,18 +60,32 @@ export default function PartsPage() {
 
   const canWrite = can(user, 'parts:add');
 
-  const allParts = useMemo(
-    () => (current ? repository.listPartsForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
+  const departmentId = current?.id;
+  const enabled = Boolean(departmentId) && scope.departmentIds.length > 0;
 
-  const summary = useMemo(
-    () =>
-      current
-        ? repository.getPartsSummary(current.id, scope)
-        : { total: 0, machinesWithParts: 0, categories: 0, dueSoon: 0, overdue: 0 },
-    [current, repository, scope],
-  );
+  /**
+   * The whole department's parts, because this screen filters on `partLifeState` — a value
+   * derived from a fitted date and an expected life, not a stored column the server can
+   * filter by. See `fetchAllPages`.
+   */
+  const {
+    data: allParts = [],
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [...queryKeys.parts.all(departmentId ?? ''), 'list'],
+    queryFn: () => listAllPartsInScope(scope, departmentId),
+    enabled,
+  });
+
+  const { data: summary = { total: 0, machinesWithParts: 0, categories: 0, dueSoon: 0, overdue: 0 } } =
+    useQuery({
+      queryKey: queryKeys.parts.summary(departmentId ?? ''),
+      queryFn: () => getPartsSummary(departmentId ?? '', scope),
+      enabled,
+    });
 
   const categories = useMemo(
     () => Array.from(new Set(allParts.map((part) => part.category))).sort(),
@@ -356,167 +373,182 @@ export default function PartsPage() {
         </CollapsibleContent>
       </Collapsible>
 
-      <ResponsiveRecordList
-        isEmpty={filtered.length === 0}
-        table={
-          <table className="w-full">
-            <caption className="sr-only">
-              Installed parts in {current.name}, {filtered.length} matching
-            </caption>
-            <thead className="bg-muted/30">
-              <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <SortableHeader
-                  label="Part code"
-                  column="partCode"
-                  sortColumn={sortColumn}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                />
-                <SortableHeader
-                  label="Part name"
-                  column="partName"
-                  sortColumn={sortColumn}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                />
-                <SortableHeader
-                  label="Machine"
-                  column="machineCode"
-                  sortColumn={sortColumn}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                />
-                <th scope="col" className="px-4 py-3">
-                  Position
-                </th>
-                <th scope="col" className="px-4 py-3 text-right">
-                  Qty
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Fitted
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Replacement
-                </th>
-                <th scope="col" className="px-4 py-3 text-right">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {paginated.map((part) => (
-                <tr key={part.id} className="transition-colors hover:bg-muted/10">
-                  <td className="px-4 py-3 font-mono text-sm font-semibold">{part.partCode}</td>
-                  <td className="px-4 py-3 font-medium">{part.partName}</td>
-                  <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
-                    {part.machineCode}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {part.positionOnMachine}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm">
-                    {part.quantity} {part.unit}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {formatDate(part.fittedDate)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PartLifeCell part={part} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={partDetailPath(part.id)}>
-                      <Button variant="ghost" size="sm">
-                        <Eye size={14} aria-hidden="true" />
-                        <span className="sr-only">View {part.partCode}</span>
-                      </Button>
-                    </Link>
-                  </td>
+      {/* "No parts yet" is a real, expected state with its own call to action; a failed
+          fetch is not, and must offer a retry rather than imply the department has none. */}
+      {isPending ? (
+        <LoadingState label="Loading parts…" />
+      ) : isError ? (
+        <ErrorState
+          title="Could not load installed parts"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      ) : (
+        <>
+        <ResponsiveRecordList
+          isEmpty={filtered.length === 0}
+          table={
+            <table className="w-full">
+              <caption className="sr-only">
+                Installed parts in {current.name}, {filtered.length} matching
+              </caption>
+              <thead className="bg-muted/30">
+                <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <SortableHeader
+                    label="Part code"
+                    column="partCode"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Part name"
+                    column="partName"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Machine"
+                    column="machineCode"
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <th scope="col" className="px-4 py-3">
+                    Position
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Qty
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Fitted
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Replacement
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        }
-        cards={paginated.map((part) => (
-          <div key={part.id} className="rounded-lg border bg-card p-4">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  href={partDetailPath(part.id)}
-                  className="font-mono text-sm font-bold text-primary hover:underline"
-                >
-                  {part.partCode}
-                </Link>
-                <p className="mt-1 font-medium">{part.partName}</p>
+              </thead>
+              <tbody className="divide-y">
+                {paginated.map((part) => (
+                  <tr key={part.id} className="transition-colors hover:bg-muted/10">
+                    <td className="px-4 py-3 font-mono text-sm font-semibold">{part.partCode}</td>
+                    <td className="px-4 py-3 font-medium">{part.partName}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
+                      {part.machineCode}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {part.positionOnMachine}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      {part.quantity} {part.unit}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {formatDate(part.fittedDate)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <PartLifeCell part={part} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={partDetailPath(part.id)}>
+                        <Button variant="ghost" size="sm">
+                          <Eye size={14} aria-hidden="true" />
+                          <span className="sr-only">View {part.partCode}</span>
+                        </Button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          }
+          cards={paginated.map((part) => (
+            <div key={part.id} className="rounded-lg border bg-card p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link
+                    href={partDetailPath(part.id)}
+                    className="font-mono text-sm font-bold text-primary hover:underline"
+                  >
+                    {part.partCode}
+                  </Link>
+                  <p className="mt-1 font-medium">{part.partName}</p>
+                </div>
+                <StatusBadge status={partLifeState(part)} />
               </div>
-              <StatusBadge status={partLifeState(part)} />
+              <dl className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <dt className="text-muted-foreground">Machine</dt>
+                  <dd className="font-mono font-medium">{part.machineCode}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Quantity</dt>
+                  <dd className="font-medium">
+                    {part.quantity} {part.unit}
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-muted-foreground">Position</dt>
+                  <dd className="font-medium">{part.positionOnMachine}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-muted-foreground">Fitted</dt>
+                  <dd className="font-medium">{formatDate(part.fittedDate)}</dd>
+                </div>
+              </dl>
+              <Link href={partDetailPath(part.id)} className="mt-3 block">
+                <Button variant="outline" size="sm" className="w-full">
+                  <Eye size={14} className="mr-2" aria-hidden="true" /> View
+                </Button>
+              </Link>
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <dt className="text-muted-foreground">Machine</dt>
-                <dd className="font-mono font-medium">{part.machineCode}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Quantity</dt>
-                <dd className="font-medium">
-                  {part.quantity} {part.unit}
-                </dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-muted-foreground">Position</dt>
-                <dd className="font-medium">{part.positionOnMachine}</dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-muted-foreground">Fitted</dt>
-                <dd className="font-medium">{formatDate(part.fittedDate)}</dd>
-              </div>
-            </dl>
-            <Link href={partDetailPath(part.id)} className="mt-3 block">
-              <Button variant="outline" size="sm" className="w-full">
-                <Eye size={14} className="mr-2" aria-hidden="true" /> View
-              </Button>
-            </Link>
+          ))}
+        />
+
+        {filtered.length === 0 &&
+          (activeFilterCount > 0 ? (
+            <EmptyState
+              icon={Package}
+              title="No parts found"
+              description="No installed part matches the current search and filters."
+              action={
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={Package}
+              title="No parts recorded"
+              description={`No components are recorded against machinery in ${current.name} yet.`}
+              action={
+                canWrite && (
+                  <Link href={registeredRoutes.partAdd}>
+                    <Button>
+                      <Plus size={16} className="mr-2" aria-hidden="true" /> Fit part
+                    </Button>
+                  </Link>
+                )
+              }
+            />
+          ))}
+
+        {totalPages > 1 && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
-        ))}
-      />
-
-      {filtered.length === 0 &&
-        (activeFilterCount > 0 ? (
-          <EmptyState
-            icon={Package}
-            title="No parts found"
-            description="No installed part matches the current search and filters."
-            action={
-              <Button variant="outline" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            icon={Package}
-            title="No parts recorded"
-            description={`No components are recorded against machinery in ${current.name} yet.`}
-            action={
-              canWrite && (
-                <Link href={registeredRoutes.partAdd}>
-                  <Button>
-                    <Plus size={16} className="mr-2" aria-hidden="true" /> Fit part
-                  </Button>
-                </Link>
-              )
-            }
-          />
-        ))}
-
-      {totalPages > 1 && (
-        <div className="mt-6">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-          />
-        </div>
+        )}
+        </>
       )}
+
     </div>
   );
 }

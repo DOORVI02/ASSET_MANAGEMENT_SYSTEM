@@ -9,8 +9,11 @@ import { PartForm, type PartFormSubmitResult } from '@/components/parts/PartForm
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getPartInScope, isPartSerialTaken, updatePart } from '@/lib/supabase/parts';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { formValuesToPartInput, partToFormValues, type PartFormValues } from '@/lib/part-form';
 import { partDetailPath, registeredRoutes } from '@/lib/routes';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
@@ -19,21 +22,25 @@ export default function PartEditPage() {
   const [, params] = useRoute(registeredRoutes.partEdit);
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const partId = params?.id;
 
-  const part = useMemo(
-    () => (partId ? repository.getPartInScope(partId, scope) : undefined),
-    [partId, repository, scope],
-  );
+  const { data: part, isPending } = useQuery({
+    queryKey: queryKeys.parts.detail(partId ?? ''),
+    queryFn: () => getPartInScope(partId ?? '', scope),
+    enabled: Boolean(partId) && scope.departmentIds.length > 0,
+  });
+
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
 
   const machines = useMemo(
-    () =>
-      current
-        ? repository.listMachinesForDepartment(current.id, scope).filter((m) => !m.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
 
   // Snapshot once so later writes cannot reset fields being edited.
@@ -44,7 +51,7 @@ export default function PartEditPage() {
   );
 
   const isSerialTaken = useCallback(
-    (serialNumber: string) => mockRepository.isPartSerialTaken(serialNumber, partId),
+    (serialNumber: string) => isPartSerialTaken(serialNumber, partId),
     [partId],
   );
 
@@ -52,6 +59,15 @@ export default function PartEditPage() {
     return <UnauthorizedPage />;
   }
 
+  if (isPending) {
+    return (
+      <div className="max-w-2xl">
+        <LoadingState label="Loading part…" />
+      </div>
+    );
+  }
+
+  // After a resolved fetch, so this is genuinely "no such part in your scope".
   if (!part || !initialValues) {
     return (
       <div className="max-w-2xl">
@@ -71,11 +87,7 @@ export default function PartEditPage() {
   }
 
   const handleSubmit = async (values: PartFormValues): Promise<PartFormSubmitResult> => {
-    const result = mockRepository.updatePart(
-      part.id,
-      formValuesToPartInput(values),
-      user?.id ?? 'unknown',
-    );
+    const result = await updatePart(part.id, formValuesToPartInput(values));
 
     if (!result.ok) {
       return {
@@ -90,6 +102,7 @@ export default function PartEditPage() {
       };
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['parts'] });
     setLocation(partDetailPath(part.id));
     return { ok: true };
   };
@@ -118,14 +131,7 @@ export default function PartEditPage() {
         />
       ) : (
         <>
-          <FeedbackMessage
-            feedback={{
-              state: 'validation',
-              title: 'Preview mode — data is not persisted',
-              description:
-                'Edits are saved to the in-memory preview store and reset on page reload.',
-            }}
-          />
+
           <PartForm
             mode="edit"
             initialValues={initialValues}
