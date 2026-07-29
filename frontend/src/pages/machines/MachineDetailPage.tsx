@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useRoute } from 'wouter';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Archive, ArrowLeft, Edit, Plus, RotateCcw } from 'lucide-react';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -15,9 +16,17 @@ import { DUE_SOON_WINDOW_DAYS, isDueSoon, isOverdue } from '@/lib/maintenance-wi
 import { maintenanceDueState } from '@/lib/maintenance-record';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
-import { mockRepository } from '@/lib/mock-repository';
 import { useMockRepository } from '@/hooks/use-mock-repository';
 import { useDepartment } from '@/hooks/use-department';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { archiveMachine, getMachineInScope, restoreMachine } from '@/lib/supabase/machines';
+import { listAllPartsForMachine } from '@/lib/supabase/parts';
+import { listAllMaintenanceForMachine } from '@/lib/supabase/maintenance';
+import { listAllRepairsForMachine } from '@/lib/supabase/repairs';
+import { listAuditLogsForEntity } from '@/lib/supabase/audit-logs';
+import { listDisplayNames } from '@/lib/supabase/profiles';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import {
   machineEditPath,
   maintenanceDetailPath,
@@ -33,43 +42,109 @@ export default function MachineDetailPage() {
   const { user } = useAuth();
   const repository = useMockRepository();
   const { scope } = useDepartment();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
   const [feedback, setFeedback] = useState<FeedbackModel | null>(null);
   const [currentTimestamp] = useState(() => Date.now());
   const machineId = params?.id;
 
-  const machine = useMemo(
-    () => (machineId ? repository.getMachineInScope(machineId, scope) : undefined),
-    [machineId, repository, scope],
-  );
-  const maintenanceHistory = useMemo(
-    () => (machineId ? repository.listMaintenanceForMachine(machineId) : []),
-    [machineId, repository],
-  );
-  const repairHistory = useMemo(
-    () => (machineId ? repository.listRepairsForMachine(machineId) : []),
-    [machineId, repository],
-  );
-  const parts = useMemo(
-    () => (machineId ? repository.listPartsForMachine(machineId) : []),
-    [machineId, repository],
-  );
+  const enabled = Boolean(machineId) && scope.departmentIds.length > 0;
+
+  const {
+    data: machine,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.machines.detail(machineId ?? ''),
+    queryFn: () => getMachineInScope(machineId ?? '', scope),
+    enabled,
+  });
+
+  /**
+   * The child histories are separate queries rather than one joined read, so a slow or
+   * failing tab cannot hold up the overview. Each is scoped server-side by the same RLS the
+   * machine itself passed through.
+   */
+  const { data: maintenanceHistory = [] } = useQuery({
+    queryKey: queryKeys.maintenance.forMachine(machineId ?? ''),
+    queryFn: () => listAllMaintenanceForMachine(machineId ?? '', scope),
+    enabled,
+  });
+  const { data: repairHistory = [] } = useQuery({
+    queryKey: queryKeys.repairs.forMachine(machineId ?? ''),
+    queryFn: () => listAllRepairsForMachine(machineId ?? '', scope),
+    enabled,
+  });
+  const { data: parts = [] } = useQuery({
+    queryKey: queryKeys.parts.forMachine(machineId ?? ''),
+    queryFn: () => listAllPartsForMachine(machineId ?? '', scope),
+    enabled,
+  });
+  const { data: activity = [] } = useQuery({
+    queryKey: queryKeys.machines.audit(machineId ?? ''),
+    queryFn: () => listAuditLogsForEntity('machine', machineId ?? ''),
+    enabled,
+  });
+
+  /**
+   * Actor names for the activity timeline, resolved through the `profile_display_names` RPC
+   * — `profiles` itself is readable only for your own row, so this is the only way to turn
+   * an audit row's `performed_by` into a name.
+   *
+   * Depends on the audit rows because the set of ids to resolve comes from them. An id the
+   * RPC declines to resolve is simply absent from the map, and the timeline falls back
+   * rather than treating it as an error.
+   */
+  const actorIds = useMemo(() => [...new Set(activity.map((row) => row.performedBy))], [activity]);
+  const { data: actorNames } = useQuery({
+    queryKey: [...queryKeys.profiles.names(), actorIds],
+    queryFn: () => listDisplayNames(actorIds),
+    enabled: actorIds.length > 0,
+  });
+
+  /**
+   * The one surface in this domain still on the mock repository. The Images tab needs the
+   * Cloudinary upload path wired through `ImageUploader`, which is mid-edit; reading the
+   * real attachment row here while uploads still went to an in-memory store would make the
+   * tab visibly lie — an upload would appear to succeed and then vanish on reload. Keeping
+   * both halves on the mock leaves it self-consistent until the real upload lands.
+   */
   const machineImage = useMemo(
     () => (machineId ? repository.getMachineImage(machineId) : undefined),
     [machineId, repository],
   );
-  const activity = useMemo(
-    () => (machineId ? repository.listAuditLogsForEntity(machineId) : []),
-    [machineId, repository],
-  );
-  const users = useMemo(() => repository.listUsers(), [repository]);
 
+  if (isPending) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <LoadingState label="Loading machine…" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <ErrorState
+          title="Could not load this machine"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
+
+  // Reached only after a successful fetch, so this is genuinely "no such machine in your
+  // scope" rather than "not loaded yet" — a distinction a synchronous repository could not
+  // draw.
   if (!machine) {
     return (
       <div className="mx-auto max-w-2xl">
         <EmptyState
           title="Machine not found"
-          description={`No machine matches the identifier "${machineId ?? ''}". It may have been removed from the register.`}
+          description={`No machine matches the identifier "${machineId ?? ''}". It may have been removed from the register, or belong to a department outside your access.`}
           action={
             <Link href="/machines">
               <Button variant="outline">
@@ -96,8 +171,12 @@ export default function MachineDetailPage() {
   const canArchive = can(user, 'machine:archive');
   const canManageImages = can(user, 'images:upload');
 
-  const handleArchive = () => {
-    const result = mockRepository.archiveMachine(machine.id, user?.id ?? 'unknown');
+  const handleArchive = async () => {
+    // No actor argument: the audit trigger records `auth.uid()` server-side.
+    const result = await archiveMachine(machine.id);
+    // Invalidated by prefix so the register, this record and its freshly-written audit row
+    // all refetch — archiving changes the status shown in three different places.
+    await queryClient.invalidateQueries({ queryKey: ['machines'] });
     setFeedback(
       result.ok
         ? {
@@ -110,8 +189,9 @@ export default function MachineDetailPage() {
     );
   };
 
-  const handleRestore = () => {
-    const result = mockRepository.restoreMachine(machine.id, user?.id ?? 'unknown');
+  const handleRestore = async () => {
+    const result = await restoreMachine(machine.id);
+    await queryClient.invalidateQueries({ queryKey: ['machines'] });
     setFeedback(
       result.ok
         ? {
@@ -516,7 +596,7 @@ export default function MachineDetailPage() {
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">
-          <MachineActivityTimeline events={activity} users={users} />
+          <MachineActivityTimeline events={activity} actorNames={actorNames} />
         </TabsContent>
       </Tabs>
     </div>

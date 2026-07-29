@@ -9,6 +9,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { mapMaintenancePlanRow, mapMaintenanceRecordRow } from './mappers';
 import {
   clampPageSize,
+  fetchAllPages,
   toRange,
   withTieBreaker,
   type OrderSpec,
@@ -79,6 +80,25 @@ export async function listMaintenanceInScope(
   const { data, error, count } = await query;
   if (error) throw error;
   return { rows: (data ?? []).map((row) => mapMaintenanceRecordRow(row)), total: count ?? 0 };
+}
+
+/**
+ * All one machine's maintenance history, as one array.
+ *
+ * The machine detail page renders the full history in a tab rather than a paged list, so it
+ * needs the whole set. Scope is still applied server-side by the underlying query and by
+ * RLS; the machine filter narrows within it and cannot widen it.
+ *
+ * See `fetchAllPages` for why this walks pages instead of asking for one large one.
+ */
+export async function listAllMaintenanceForMachine(
+  machineId: string,
+  scope: AccessScope,
+): Promise<MaintenanceRecord[]> {
+  if (scope.departmentIds.length === 0) return [];
+  return fetchAllPages((page, pageSize) =>
+    listMaintenanceInScope({ scope, filters: { machineId }, page, pageSize }),
+  );
 }
 
 export async function getMaintenanceRecordInScope(

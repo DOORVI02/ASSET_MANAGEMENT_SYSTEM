@@ -2,6 +2,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { mapAttachmentRow, mapMachinePartRow, mapPartReplacementRow } from './mappers';
 import {
   clampPageSize,
+  fetchAllPages,
   toRange,
   withTieBreaker,
   type OrderSpec,
@@ -76,6 +77,25 @@ export async function listPartsInScope(params: PartListParams): Promise<PagedRes
   const { data, error, count } = await query;
   if (error) throw error;
   return { rows: (data ?? []).map((row) => mapMachinePartRow(row)), total: count ?? 0 };
+}
+
+/**
+ * All parts fitted to one machine, as one array.
+ *
+ * The machine detail page renders the full history in a tab rather than a paged list, so it
+ * needs the whole set. Scope is still applied server-side by the underlying query and by
+ * RLS; the machine filter narrows within it and cannot widen it.
+ *
+ * See `fetchAllPages` for why this walks pages instead of asking for one large one.
+ */
+export async function listAllPartsForMachine(
+  machineId: string,
+  scope: AccessScope,
+): Promise<MachinePart[]> {
+  if (scope.departmentIds.length === 0) return [];
+  return fetchAllPages((page, pageSize) =>
+    listPartsInScope({ scope, filters: { machineId }, page, pageSize }),
+  );
 }
 
 export async function getPartInScope(

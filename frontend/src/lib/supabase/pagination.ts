@@ -55,3 +55,42 @@ export function withTieBreaker(order: OrderSpec): [OrderSpec, OrderSpec] | [Orde
   if (order.column === 'id') return [order];
   return [order, { column: 'id', ascending: true }];
 }
+
+/**
+ * Walks a paged query to completion and returns every row.
+ *
+ * Used by the screens that filter, sort and paginate in the browser over a complete list —
+ * multi-select statuses, derived due states, a record's full child history. Those are shapes
+ * the single-value server-side filters don't express, and rewriting each screen around them
+ * would be a much larger change than the cutover they belong to.
+ *
+ * The loop is not a formality. Two independent caps sit under it: `clampPageSize` refuses
+ * anything above `MAX_PAGE_SIZE` (100), and PostgREST refuses anything above
+ * `config.toml`'s `[api] max_rows` (1000). A single "just ask for everything" request
+ * therefore cannot return more than 100 rows however it is written — it would simply return
+ * a truncated list that looks complete.
+ *
+ * That is not hypothetical: the first version of this loop lived in `machines.ts` and
+ * compared `rows.length` against its own *requested* page size of 1000 rather than the
+ * clamped 100 it actually received, so it stopped after one page and silently capped the
+ * register at 100 machines. Clamping here, once, is what makes the termination check compare
+ * against the size the query really used.
+ *
+ * If a list ever grows large enough that holding it in memory is the problem, the fix is to
+ * push that screen's filters into its query params and paginate server-side — not to raise
+ * a cap.
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (page: number, pageSize: number) => Promise<PagedResult<T>>,
+): Promise<T[]> {
+  const pageSize = clampPageSize(MAX_PAGE_SIZE);
+  const all: T[] = [];
+
+  for (let page = 1; ; page += 1) {
+    const { rows, total } = await fetchPage(page, pageSize);
+    all.push(...rows);
+    // Stops on a short page as well as on the reported total, so a row deleted between
+    // requests cannot turn this into an endless loop.
+    if (rows.length < pageSize || all.length >= total) return all;
+  }
+}

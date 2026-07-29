@@ -169,7 +169,7 @@ enabled = true
 # "reset password" would be sent to localhost — the request succeeds, the mail arrives, and
 # the link is useless. `frontend/src/lib/supabase/auth.ts` builds `redirectTo` from
 # `window.location.origin` precisely so that adding the origin here is the only step needed.
-site_url = "http://localhost:5173"
+site_url = "https://sail-plant-maintenance.vercel.app"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
@@ -177,6 +177,8 @@ site_url = "http://localhost:5173"
 # Vercel preview deployments get a new hostname per deploy and would each need adding, which
 # is why recovery is only expected to work on the origins listed here.
 additional_redirect_urls = [
+  "https://sail-plant-maintenance.vercel.app",
+  "https://sail-plant-maintenance.vercel.app/reset-password",
   "http://localhost:5173",
   "http://localhost:5173/reset-password",
   "http://127.0.0.1:5173",

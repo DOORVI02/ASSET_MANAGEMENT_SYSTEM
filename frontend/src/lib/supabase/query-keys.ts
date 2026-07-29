@@ -35,6 +35,7 @@ export const queryKeys = {
     audit: (machineId: string) => ['machines', 'detail', machineId, 'audit'] as const,
   },
   parts: {
+    forMachine: (machineId: string) => ['parts', 'machine', machineId] as const,
     all: (departmentId: string) => ['parts', departmentId] as const,
     list: (departmentId: string, filters: unknown) =>
       ['parts', departmentId, 'list', filters] as const,
@@ -43,6 +44,7 @@ export const queryKeys = {
     summary: (departmentId: string) => ['parts', departmentId, 'summary'] as const,
   },
   maintenance: {
+    forMachine: (machineId: string) => ['maintenance', 'machine', machineId] as const,
     all: (departmentId: string) => ['maintenance', departmentId] as const,
     records: (departmentId: string, filters: unknown) =>
       ['maintenance', departmentId, 'records', filters] as const,
@@ -53,6 +55,7 @@ export const queryKeys = {
     summary: (departmentId: string) => ['maintenance', departmentId, 'summary'] as const,
   },
   repairs: {
+    forMachine: (machineId: string) => ['repairs', 'machine', machineId] as const,
     all: (departmentId: string) => ['repairs', departmentId] as const,
     list: (departmentId: string, filters: unknown) =>
       ['repairs', departmentId, 'list', filters] as const,

@@ -2,6 +2,7 @@ import { getSupabaseClient } from '@/lib/supabase';
 import { mapAttachmentRow, mapMachineRow } from './mappers';
 import {
   clampPageSize,
+  fetchAllPages,
   toRange,
   withTieBreaker,
   type OrderSpec,
@@ -73,35 +74,14 @@ export async function listMachinesInScope(
  *
  * The register screen filters, sorts and paginates in the browser over a complete list —
  * multi-select statuses, a derived overdue/due-soon filter, and a multi-department filter,
- * none of which `listMachinesInScope`'s single-value server-side params express. Rewriting
- * that screen around server-side paging would be a far larger change than the cutover it is
- * part of, and would change behaviour the flow tests already pin down. So the cutover keeps
- * the page logic and changes only where the rows come from.
- *
- * The pagination is real, not a large `pageSize`: PostgREST caps every response at
- * `config.toml`'s `[api] max_rows = 1000`, so a single request cannot return more than that
- * no matter what is asked for. A register that grew past 1000 machines would silently
- * truncate — the loop is what makes this correct rather than merely working today.
- *
- * If the register does grow to where this is too much to hold, the fix is to move the
- * screen's filters into `MachineListFilters` and page server-side, not to raise the page
- * size.
+ * none of which `MachineListFilters`' single-value params express. See `fetchAllPages` for
+ * why this walks pages rather than requesting one large one.
  */
 export async function listAllMachinesInScope(scope: AccessScope): Promise<Machine[]> {
   if (scope.departmentIds.length === 0) return [];
-
-  const pageSize = 1000;
-  const all: Machine[] = [];
-
-  for (let page = 1; ; page += 1) {
-    const { rows, total } = await listMachinesInScope({ scope, page, pageSize });
-    all.push(...rows);
-    // Stops on a short page as well as on the count, so a row deleted between requests
-    // cannot turn this into an endless loop.
-    if (rows.length < pageSize || all.length >= total) break;
-  }
-
-  return all;
+  return fetchAllPages((page, pageSize) =>
+    listMachinesInScope({ scope, page, pageSize }),
+  );
 }
 
 export async function getMachineInScope(

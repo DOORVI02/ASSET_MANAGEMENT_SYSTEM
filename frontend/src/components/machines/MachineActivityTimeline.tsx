@@ -1,12 +1,19 @@
 import { History } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatDateTime } from '@/lib/utils';
-import type { AuditLog, UserProfile } from '@/lib/types';
+import type { AuditLog } from '@/lib/types';
 
 interface MachineActivityTimelineProps {
   events: AuditLog[];
-  /** Resolves `performedBy` actor IDs to display names. */
-  users: UserProfile[];
+  /**
+   * Resolves `performedBy` actor ids to display names.
+   *
+   * A `Map` rather than a profile list, and deliberately allowed to be incomplete: names now
+   * come from the `profile_display_names` RPC, which only resolves people whose departments
+   * overlap the viewer's. An unresolved id is an access boundary doing its job, not missing
+   * data, so it falls back rather than blanking the row.
+   */
+  actorNames?: Map<string, string>;
 }
 
 const actionLabels: Record<string, string> = {
@@ -41,19 +48,18 @@ function humanizeAction(action: string): string {
 }
 
 /** Audit timeline for one machine, driven by typed repository events. */
-export function MachineActivityTimeline({ events, users }: MachineActivityTimelineProps) {
+export function MachineActivityTimeline({ events, actorNames }: MachineActivityTimelineProps) {
   if (events.length === 0) {
     return (
       <EmptyState
         icon={History}
         title="No recorded activity"
-        description="Changes made to this machine during the preview session appear here."
+        description="Changes made to this machine appear here."
       />
     );
   }
 
-  const nameFor = (actorId: string): string =>
-    users.find((user) => user.id === actorId)?.name ?? 'System';
+  const nameFor = (actorId: string): string => actorNames?.get(actorId) ?? 'Another user';
 
   return (
     <div className="rounded-lg border bg-card p-5">
