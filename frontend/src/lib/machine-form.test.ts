@@ -9,7 +9,51 @@ import {
   validateMachineForm,
   type MachineFormValues,
 } from './machine-form';
-import { mockMachines } from './mock-data';
+import type { Machine } from './types';
+
+/**
+ * Local fixtures. These used to come from `mock-data.ts`, which was deleted in the
+ * 2026-07-29 backend cutover — this file tests pure form mapping and validation, so it needs
+ * a couple of representative machines, not a data layer.
+ */
+const mockMachines: Machine[] = [
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    code: 'SP3-PMP-001',
+    name: 'Process water pump',
+    department: 'Sinter Plant 3',
+    departmentId: '22222222-2222-4222-8222-222222222222',
+    type: 'pump',
+    manufacturer: 'KSB',
+    model: 'ETA 125',
+    location: 'Pump house bay 2',
+    status: 'active',
+    installationDate: '2021-04-12',
+    nextMaintenanceDate: '2026-09-01',
+    description: 'Feeds the cooling circuit.',
+    isArchived: false,
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+  {
+    id: '33333333-3333-4333-8333-333333333333',
+    code: 'SP3-CNV-014',
+    name: 'Retired sinter conveyor',
+    department: 'Sinter Plant 3',
+    departmentId: '22222222-2222-4222-8222-222222222222',
+    type: 'conveyor',
+    manufacturer: 'Elecon',
+    model: 'BC-1400',
+    location: 'Sinter machine discharge',
+    status: 'retired',
+    installationDate: '2009-02-01',
+    nextMaintenanceDate: '2026-01-01',
+    description: 'Replaced during the 2026 overhaul.',
+    isArchived: true,
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+];
 
 function validValues(overrides: Partial<MachineFormValues> = {}): MachineFormValues {
   return {

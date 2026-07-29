@@ -24,7 +24,14 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listAllMaintenanceInScope } from '@/lib/supabase/maintenance';
+import { listAllRepairsInScope } from '@/lib/supabase/repairs';
+import { listAllPartsInScope } from '@/lib/supabase/parts';
+import { getDepartmentSummary } from '@/lib/supabase/departments';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { isDueSoon, isOverdue, DUE_SOON_WINDOW_DAYS } from '@/lib/maintenance-window';
 import { maintenanceDueState } from '@/lib/maintenance-record';
 import { partLifeState } from '@/lib/part-life';
@@ -127,7 +134,6 @@ function searchable(...values: (string | number | undefined)[]): string {
 export default function ReportsPage() {
   const { user } = useAuth();
   const { current, available, scope } = useDepartment();
-  const repository = useMockRepository();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
 
@@ -155,22 +161,52 @@ export default function ReportsPage() {
     [visibleReports, selected],
   );
 
-  const machines = useMemo(
-    () => (current ? repository.listMachinesForDepartment(current.id, scope) : []),
-    [current, repository, scope],
+  const departmentId = current?.id;
+  const enabled = Boolean(departmentId) && scope.departmentIds.length > 0;
+
+  /**
+   * Reports aggregate whole datasets — counts, groupings, date ranges across every record
+   * in the department — so each one genuinely needs the full set rather than a page of it.
+   */
+  const { data: machines = [], isPending: machinesPending } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), departmentId ?? '', 'reports'],
+    queryFn: () => listAllMachinesInScope(scope, departmentId),
+    enabled,
+  });
+  const { data: maintenance = [], isPending: maintenancePending } = useQuery({
+    queryKey: [...queryKeys.maintenance.all(departmentId ?? ''), 'reports'],
+    queryFn: () => listAllMaintenanceInScope(scope, departmentId),
+    enabled,
+  });
+  const { data: repairs = [], isPending: repairsPending } = useQuery({
+    queryKey: [...queryKeys.repairs.all(departmentId ?? ''), 'reports'],
+    queryFn: () => listAllRepairsInScope(scope, departmentId),
+    enabled,
+  });
+  const { data: parts = [], isPending: partsPending } = useQuery({
+    queryKey: [...queryKeys.parts.all(departmentId ?? ''), 'reports'],
+    queryFn: () => listAllPartsInScope(scope, departmentId),
+    enabled,
+  });
+
+  // The department-assets report needs one summary per department the user can reach.
+  const departmentSummaries = useQueries({
+    queries: available.map((department) => ({
+      queryKey: queryKeys.departments.summary(department.id),
+      queryFn: () => getDepartmentSummary(department.id, scope),
+      enabled: scope.departmentIds.length > 0,
+    })),
+  });
+  const summaryByDepartmentId = useMemo(
+    () =>
+      new Map(
+        available.map((department, index) => [department.id, departmentSummaries[index]?.data]),
+      ),
+    [available, departmentSummaries],
   );
-  const maintenance = useMemo(
-    () => (current ? repository.listMaintenanceForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
-  const repairs = useMemo(
-    () => (current ? repository.listRepairsForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
-  const parts = useMemo(
-    () => (current ? repository.listPartsForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
+
+  const reportsPending =
+    machinesPending || maintenancePending || repairsPending || partsPending;
 
   const table = useMemo<ReportTable | null>(() => {
     if (!selectedDefinition) return null;
@@ -198,7 +234,13 @@ export default function ReportsPage() {
         return {
           columns: ['Department', 'Code', 'Machines', 'Due soon', 'Overdue'],
           rows: available.map((department) => {
-            const summary = repository.getDepartmentSummary(department.id, scope);
+            // Absent only while that department's summary is still loading; the screen
+            // withholds the whole table until then, so zeroes never read as findings.
+            const summary = summaryByDepartmentId.get(department.id) ?? {
+              total: 0,
+              dueSoon: 0,
+              overdue: 0,
+            };
             return {
               key: department.id,
               search: searchable(department.name, department.code),
@@ -335,7 +377,7 @@ export default function ReportsPage() {
           })),
         };
     }
-  }, [selectedDefinition, machines, maintenance, repairs, parts, available, repository, scope]);
+  }, [selectedDefinition, machines, maintenance, repairs, parts, available, summaryByDepartmentId]);
 
   const filteredRows = useMemo(() => {
     if (!table) return [];
@@ -412,6 +454,17 @@ export default function ReportsPage() {
           title="Select a department first"
           description="Every report is scoped to one department. Choose one to continue."
         />
+      </div>
+    );
+  }
+
+  // A report is an aggregate: a partly-loaded one is not a smaller true answer, it is a
+  // wrong one. Nothing renders until every dataset it counts over has arrived.
+  if (reportsPending) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Reports" description={`Reports for ${current.name} (${current.code}).`} />
+        <LoadingState label="Loading report data…" />
       </div>
     );
   }

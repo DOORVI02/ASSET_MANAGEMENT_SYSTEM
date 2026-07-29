@@ -8,8 +8,8 @@ import type { Database } from './database.types';
  * client under the signed-in user's JWT and PostgreSQL RLS — it never carries a
  * service-role key, which belongs only to Edge Functions.
  *
- * Not imported anywhere yet. Phase 11 replaces the mock repository with real queries
- * built on this client; until then the app runs entirely on `src/lib/mock-repository.ts`.
+ * Every page reads and writes through this client as of the 2026-07-29 cutover; the mock
+ * repository it replaced has been deleted.
  */
 let client: SupabaseClient<Database> | undefined;
 

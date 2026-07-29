@@ -12,8 +12,12 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMaintenanceRecordInScope, updateMaintenanceRecord } from '@/lib/supabase/maintenance';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listTechnicians } from '@/lib/supabase/technicians';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { isOpenMaintenance } from '@/lib/maintenance-record';
 import {
   formValuesToMaintenanceRecordInput,
@@ -27,22 +31,28 @@ export default function MaintenanceEditPage() {
   const [, params] = useRoute(registeredRoutes.maintenanceEdit);
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const recordId = params?.id;
 
-  const record = useMemo(
-    () => (recordId ? repository.getMaintenanceRecordInScope(recordId, scope) : undefined),
-    [recordId, repository, scope],
-  );
+  const { data: record, isPending } = useQuery({
+    queryKey: queryKeys.maintenance.recordDetail(recordId ?? ''),
+    queryFn: () => getMaintenanceRecordInScope(recordId ?? '', scope),
+    enabled: Boolean(recordId) && scope.departmentIds.length > 0,
+  });
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository.listMachinesForDepartment(current.id, scope).filter((m) => !m.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
-  const technicians = useMemo(() => repository.listTechnicians(), [repository]);
+  const { data: technicians = [] } = useQuery({
+    queryKey: queryKeys.technicians.list(),
+    queryFn: listTechnicians,
+  });
 
   const initialValues = useMemo(
     () => (record ? maintenanceRecordToFormValues(record) : null),
@@ -52,6 +62,14 @@ export default function MaintenanceEditPage() {
 
   if (!can(user, 'maintenance:edit')) {
     return <UnauthorizedPage />;
+  }
+
+  if (isPending) {
+    return (
+      <div className="max-w-2xl">
+        <LoadingState label="Loading maintenance record…" />
+      </div>
+    );
   }
 
   if (!record || !initialValues) {
@@ -75,11 +93,7 @@ export default function MaintenanceEditPage() {
   const handleSubmit = async (
     values: MaintenanceRecordFormValues,
   ): Promise<MaintenanceRecordFormSubmitResult> => {
-    const result = mockRepository.updateMaintenanceRecord(
-      record.id,
-      formValuesToMaintenanceRecordInput(values),
-      user?.id ?? 'unknown',
-    );
+    const result = await updateMaintenanceRecord(record.id, formValuesToMaintenanceRecordInput(values));
 
     if (!result.ok) {
       return {
@@ -89,6 +103,7 @@ export default function MaintenanceEditPage() {
       };
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setLocation(maintenanceDetailPath(record.id));
     return { ok: true };
   };

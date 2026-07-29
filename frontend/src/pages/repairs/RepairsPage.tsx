@@ -16,7 +16,11 @@ import { repairDetailPath, repairsPath, registeredRoutes } from '@/lib/routes';
 import { formatDate } from '@/lib/utils';
 import { repairStatusLabels } from '@/lib/repair-record';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { useQuery } from '@tanstack/react-query';
+import { getRepairSummary, listAllRepairsInScope } from '@/lib/supabase/repairs';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import type { RepairRecord, RepairStatus } from '@/lib/types';
 
 const statuses: RepairStatus[] = [
@@ -55,7 +59,6 @@ function SummaryCard({
 export default function RepairsPage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState('');
@@ -81,24 +84,32 @@ export default function RepairsPage() {
   const from = params.get('from') ?? '';
   const to = params.get('to') ?? '';
   const downtime = params.get('downtime') === 'recorded';
-  const records = useMemo(
-    () => (current ? repository.listRepairsForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
-  const summary = useMemo(
-    () =>
-      current
-        ? repository.getRepairSummary(current.id, scope)
-        : {
+  const departmentId = current?.id;
+  const enabled = Boolean(departmentId) && scope.departmentIds.length > 0;
+
+  const {
+    data: records = [],
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [...queryKeys.repairs.all(departmentId ?? ''), 'list'],
+    queryFn: () => listAllRepairsInScope(scope, departmentId),
+    enabled,
+  });
+  const { data: summary = {
             reported: 0,
             inProgress: 0,
             waitingForParts: 0,
             completed: 0,
             cancelled: 0,
             downtimeHours: 0,
-          },
-    [current, repository, scope],
-  );
+          } } = useQuery({
+    queryKey: queryKeys.repairs.summary(departmentId ?? ''),
+    queryFn: () => getRepairSummary(departmentId ?? '', scope),
+    enabled,
+  });
   const machines = useMemo(
     () =>
       Array.from(new Map(records.map((record) => [record.machineId, record.machineCode]))).sort(
@@ -401,79 +412,88 @@ export default function RepairsPage() {
           </Button>
         </div>
       ) : null}
-      {shown.length ? (
-        <>
-          <ResponsiveRecordList
-            table={
-              <table className="w-full text-sm">
-                <caption className="sr-only">
-                  Repair records, {shown.length} shown on this page
-                </caption>
-                <thead className="bg-muted/30">
-                  <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    <th scope="col" className="px-4 py-3">
-                      Machine
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Problem
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Status
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Reported
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Assignee
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Downtime
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {shown.map((record) => (
-                    <RepairRow key={record.id} record={record} />
-                  ))}
-                </tbody>
-              </table>
-            }
-            cards={shown.map((record) => (
-              <Link
-                key={record.id}
-                href={repairDetailPath(record.id)}
-                className="block rounded-lg border bg-card p-4 shadow-sm transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{record.machineCode}</p>
-                    <p className="text-sm text-muted-foreground">{record.description}</p>
-                  </div>
-                  <StatusBadge status={record.status} />
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Reported {formatDate(record.reportedDate)} · {record.downtimeHours ?? 0} h
-                  downtime
-                </p>
-              </Link>
-            ))}
-          />
-          <Pagination currentPage={page} totalPages={pageCount} onPageChange={setPage} />
-        </>
-      ) : (
-        <EmptyState
-          icon={AlertTriangle}
-          title="No repair records match"
-          description="Try clearing a filter or report a new repair for this department."
-          action={
-            activeFilterCount ? (
-              <Button variant="outline" onClick={removeAll}>
-                Clear filters
-              </Button>
-            ) : undefined
-          }
+      {isPending ? (
+        <LoadingState label="Loading repairs…" />
+      ) : isError ? (
+        <ErrorState
+          title="Could not load repairs"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
         />
+      ) : shown.length ? (
+        <>
+            <ResponsiveRecordList
+              table={
+                <table className="w-full text-sm">
+                  <caption className="sr-only">
+                    Repair records, {shown.length} shown on this page
+                  </caption>
+                  <thead className="bg-muted/30">
+                    <tr className="border-b text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <th scope="col" className="px-4 py-3">
+                        Machine
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Problem
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Status
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Reported
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Assignee
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Downtime
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {shown.map((record) => (
+                      <RepairRow key={record.id} record={record} />
+                    ))}
+                  </tbody>
+                </table>
+              }
+              cards={shown.map((record) => (
+                <Link
+                  key={record.id}
+                  href={repairDetailPath(record.id)}
+                  className="block rounded-lg border bg-card p-4 shadow-sm transition-colors hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{record.machineCode}</p>
+                      <p className="text-sm text-muted-foreground">{record.description}</p>
+                    </div>
+                    <StatusBadge status={record.status} />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Reported {formatDate(record.reportedDate)} · {record.downtimeHours ?? 0} h
+                    downtime
+                  </p>
+                </Link>
+              ))}
+            />
+            <Pagination currentPage={page} totalPages={pageCount} onPageChange={setPage} />
+          </>
+        ) : (
+          <EmptyState
+            icon={AlertTriangle}
+            title="No repair records match"
+            description="Try clearing a filter or report a new repair for this department."
+            action={
+              activeFilterCount ? (
+                <Button variant="outline" onClick={removeAll}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          />
       )}
+
     </div>
   );
 }

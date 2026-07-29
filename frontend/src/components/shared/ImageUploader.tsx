@@ -11,7 +11,13 @@ import {
 } from '@/lib/image-policy';
 
 interface ImageUploaderProps {
-  onUpload?: (file: File) => void;
+  /**
+   * Performs the upload. Awaited since the 2026-07-29 cutover, so the progress bar tracks a
+   * real Cloudinary round trip and the "uploading" state ends when the upload actually ends,
+   * not when a timer says so. A rejection surfaces inline and the preview is rolled back —
+   * previously the bar always reached 100% whatever happened.
+   */
+  onUpload?: (file: File) => void | Promise<unknown>;
   className?: string;
   defaultImage?: string;
 }
@@ -79,26 +85,47 @@ export function ImageUploader({ onUpload, className, defaultImage }: ImageUpload
       objectUrlRef.current = objectUrl;
       setPreviewUrl(objectUrl);
 
-      // Simulated upload. Replaced by a real Cloudinary signature round trip in the
-      // backend phase; the progress UI is deliberately already in place.
+      if (!onUpload) return;
+
       setUploading(true);
       setProgress(0);
 
+      /**
+       * Cloudinary reports real byte progress, but only once the signature round trip has
+       * finished, so the bar would sit at zero for the whole first request. This creeps to
+       * 90% while that happens and stops there — the last 10% belongs to the real completion,
+       * so the bar never claims to be finished before the upload is.
+       */
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
-        setProgress((p) => {
-          if (p >= 100) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            intervalRef.current = null;
-            setUploading(false);
-            if (onUpload) onUpload(file);
-            return 100;
-          }
-          return p + 10;
+        setProgress((p) => (p >= 90 ? 90 : p + 10));
+      }, 150);
+
+      const stopTicking = () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      };
+
+      void Promise.resolve(onUpload(file))
+        .then(() => {
+          stopTicking();
+          setProgress(100);
+          setUploading(false);
+        })
+        .catch((uploadError: unknown) => {
+          stopTicking();
+          setUploading(false);
+          setProgress(0);
+          // Roll the preview back: leaving the image on screen after a failed upload would
+          // imply it was stored.
+          releaseObjectUrl();
+          setPreviewUrl(defaultImage ?? null);
+          setError(
+            uploadError instanceof Error ? uploadError.message : 'The image could not be uploaded.',
+          );
         });
-      }, 100);
     },
-    [onUpload, releaseObjectUrl],
+    [onUpload, releaseObjectUrl, defaultImage],
   );
 
   const handleDrop = useCallback(

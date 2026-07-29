@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useRoute } from 'wouter';
 import { ArrowLeft, Ban, CheckCircle2, Edit, PlayCircle, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -24,8 +24,16 @@ import { fieldAria } from '@/lib/form-aria';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  cancelMaintenanceRecord,
+  completeMaintenanceRecord,
+  getMaintenanceRecordInScope,
+  reopenMaintenanceRecord,
+  startMaintenanceRecord,
+} from '@/lib/supabase/maintenance';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { maintenanceDueState } from '@/lib/maintenance-record';
 import {
   maintenanceCancellationSchema,
@@ -41,15 +49,24 @@ export default function MaintenanceDetailPage() {
   const [, params] = useRoute(registeredRoutes.maintenanceDetail);
   const { user } = useAuth();
   const { scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<FeedbackModel | null>(null);
   const recordId = params?.id;
 
-  const record = useMemo(
-    () => (recordId ? repository.getMaintenanceRecordInScope(recordId, scope) : undefined),
-    [recordId, repository, scope],
-  );
+  const { data: record, isPending } = useQuery({
+    queryKey: queryKeys.maintenance.recordDetail(recordId ?? ''),
+    queryFn: () => getMaintenanceRecordInScope(recordId ?? '', scope),
+    enabled: Boolean(recordId) && scope.departmentIds.length > 0,
+  });
   const canWrite = can(user, 'maintenance:edit');
+
+  if (isPending) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <LoadingState label="Loading maintenance record…" />
+      </div>
+    );
+  }
 
   if (!record) {
     return (
@@ -71,8 +88,9 @@ export default function MaintenanceDetailPage() {
 
   const dueState = maintenanceDueState(record);
 
-  const handleStart = () => {
-    const result = mockRepository.startMaintenanceRecord(record.id, user?.id ?? 'unknown');
+  const handleStart = async () => {
+    const result = await startMaintenanceRecord(record.id);
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setFeedback(
       result.ok
         ? {
@@ -84,8 +102,9 @@ export default function MaintenanceDetailPage() {
     );
   };
 
-  const handleReopen = () => {
-    const result = mockRepository.reopenMaintenanceRecord(record.id, user?.id ?? 'unknown');
+  const handleReopen = async () => {
+    const result = await reopenMaintenanceRecord(record.id);
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setFeedback(
       result.ok
         ? {
@@ -124,12 +143,10 @@ export default function MaintenanceDetailPage() {
                 <>
                   <CompleteDialog
                     recordId={record.id}
-                    actorId={user?.id ?? 'unknown'}
                     onCompleted={setFeedback}
                   />
                   <CancelDialog
                     recordId={record.id}
-                    actorId={user?.id ?? 'unknown'}
                     onCancelled={setFeedback}
                   />
                   <Link href={maintenanceEditPath(record.id)}>
@@ -207,11 +224,9 @@ function titleCase(value: string): string {
 
 function CompleteDialog({
   recordId,
-  actorId,
   onCompleted,
 }: {
   recordId: string;
-  actorId: string;
   onCompleted: (feedback: FeedbackModel) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -224,7 +239,7 @@ function CompleteDialog({
     {},
   );
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const parsed = maintenanceCompletionSchema.safeParse(values);
     if (!parsed.success) {
@@ -240,7 +255,7 @@ function CompleteDialog({
     }
 
     setErrors({});
-    const result = mockRepository.completeMaintenanceRecord(recordId, actorId, parsed.data);
+    const result = await completeMaintenanceRecord(recordId, parsed.data);
     setOpen(false);
     onCompleted(
       result.ok
@@ -327,11 +342,9 @@ function CompleteDialog({
 
 function CancelDialog({
   recordId,
-  actorId,
   onCancelled,
 }: {
   recordId: string;
-  actorId: string;
   onCancelled: (feedback: FeedbackModel) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -340,7 +353,7 @@ function CancelDialog({
     Partial<Record<keyof MaintenanceCancellationValues, string>>
   >({});
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const parsed = maintenanceCancellationSchema.safeParse(values);
     if (!parsed.success) {
@@ -356,7 +369,7 @@ function CancelDialog({
     }
 
     setErrors({});
-    const result = mockRepository.cancelMaintenanceRecord(recordId, actorId, parsed.data.reason);
+    const result = await cancelMaintenanceRecord(recordId, parsed.data.reason);
     setOpen(false);
     onCancelled(
       result.ok

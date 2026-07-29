@@ -13,8 +13,17 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  archiveMaintenancePlan,
+  getMaintenancePlanInScope,
+  restoreMaintenancePlan,
+  updateMaintenancePlan,
+} from '@/lib/supabase/maintenance';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listTechnicians } from '@/lib/supabase/technicians';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import {
   formValuesToMaintenancePlanInput,
   maintenancePlanToFormValues,
@@ -27,22 +36,28 @@ export default function MaintenancePlanEditPage() {
   const [, params] = useRoute(registeredRoutes.maintenancePlanEdit);
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const planId = params?.id;
 
-  const plan = useMemo(
-    () => (planId ? repository.getMaintenancePlanInScope(planId, scope) : undefined),
-    [planId, repository, scope],
-  );
+  const { data: plan, isPending } = useQuery({
+    queryKey: queryKeys.maintenance.planDetail(planId ?? ''),
+    queryFn: () => getMaintenancePlanInScope(planId ?? '', scope),
+    enabled: Boolean(planId) && scope.departmentIds.length > 0,
+  });
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository.listMachinesForDepartment(current.id, scope).filter((m) => !m.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
-  const technicians = useMemo(() => repository.listTechnicians(), [repository]);
+  const { data: technicians = [] } = useQuery({
+    queryKey: queryKeys.technicians.list(),
+    queryFn: listTechnicians,
+  });
 
   const initialValues = useMemo(
     () => (plan ? maintenancePlanToFormValues(plan) : null),
@@ -52,6 +67,14 @@ export default function MaintenancePlanEditPage() {
 
   if (!can(user, 'maintenance:edit')) {
     return <UnauthorizedPage />;
+  }
+
+  if (isPending) {
+    return (
+      <div className="max-w-2xl">
+        <LoadingState label="Loading maintenance plan…" />
+      </div>
+    );
   }
 
   if (!plan || !initialValues) {
@@ -75,11 +98,7 @@ export default function MaintenancePlanEditPage() {
   const handleSubmit = async (
     values: MaintenancePlanFormValues,
   ): Promise<MaintenancePlanFormSubmitResult> => {
-    const result = mockRepository.updateMaintenancePlan(
-      plan.id,
-      formValuesToMaintenancePlanInput(values),
-      user?.id ?? 'unknown',
-    );
+    const result = await updateMaintenancePlan(plan.id, formValuesToMaintenancePlanInput(values));
 
     if (!result.ok) {
       return {
@@ -93,13 +112,15 @@ export default function MaintenancePlanEditPage() {
     return { ok: true };
   };
 
-  const handleArchive = () => {
-    mockRepository.archiveMaintenancePlan(plan.id, user?.id ?? 'unknown');
+  const handleArchive = async () => {
+    await archiveMaintenancePlan(plan.id);
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setLocation(maintenancePath({ view: 'plans' }));
   };
 
-  const handleRestore = () => {
-    mockRepository.restoreMaintenancePlan(plan.id, user?.id ?? 'unknown');
+  const handleRestore = async () => {
+    await restoreMaintenancePlan(plan.id);
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
   };
 
   return (

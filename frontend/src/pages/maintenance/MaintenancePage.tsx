@@ -14,7 +14,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getMaintenanceSummary,
+  listAllMaintenanceInScope,
+  listMaintenancePlansInScope,
+} from '@/lib/supabase/maintenance';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { maintenanceDueState } from '@/lib/maintenance-record';
 import { planDueState, planNextDueDate, formatInterval } from '@/lib/maintenance-plan';
 import { DUE_SOON_WINDOW_DAYS } from '@/lib/maintenance-window';
@@ -47,7 +55,6 @@ function titleCase(value: string): string {
 export default function MaintenancePage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState('');
@@ -79,21 +86,34 @@ export default function MaintenancePage() {
 
   const canWrite = can(user, 'maintenance:add');
 
-  const records = useMemo(
-    () => (current ? repository.listMaintenanceForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
-  const plans = useMemo(
-    () => (current ? repository.listMaintenancePlansForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
-  const summary = useMemo(
-    () =>
-      current
-        ? repository.getMaintenanceSummary(current.id, scope)
-        : { scheduled: 0, inProgress: 0, completed: 0, cancelled: 0, dueSoon: 0, overdue: 0 },
-    [current, repository, scope],
-  );
+  const departmentId = current?.id;
+  const enabled = Boolean(departmentId) && scope.departmentIds.length > 0;
+
+  const {
+    data: records = [],
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: [...queryKeys.maintenance.all(departmentId ?? ''), 'records'],
+    queryFn: () => listAllMaintenanceInScope(scope, departmentId),
+    enabled,
+  });
+
+  const { data: plans = [] } = useQuery({
+    queryKey: [...queryKeys.maintenance.all(departmentId ?? ''), 'plans'],
+    queryFn: () => listMaintenancePlansInScope({ scope, departmentId }),
+    enabled,
+  });
+
+  const {
+    data: summary = { scheduled: 0, inProgress: 0, completed: 0, cancelled: 0, dueSoon: 0, overdue: 0 },
+  } = useQuery({
+    queryKey: queryKeys.maintenance.summary(departmentId ?? ''),
+    queryFn: () => getMaintenanceSummary(departmentId ?? '', scope),
+    enabled,
+  });
 
   const machines = useMemo(
     () =>
@@ -270,7 +290,17 @@ export default function MaintenancePage() {
         <SummaryCard label="Cancelled" value={summary.cancelled} />
       </dl>
 
-      <Tabs value={activeTab} onValueChange={setTab}>
+      {/* A failed fetch must offer a retry rather than render as "no work scheduled". */}
+      {isPending ? (
+        <LoadingState label="Loading maintenance…" />
+      ) : isError ? (
+        <ErrorState
+          title="Could not load maintenance"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      ) : (
+            <Tabs value={activeTab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="records">Records</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
@@ -627,6 +657,7 @@ export default function MaintenancePage() {
           )}
         </TabsContent>
       </Tabs>
+      )}
     </div>
   );
 }

@@ -10,7 +10,10 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useAuth } from '@/hooks/use-auth';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createRepairRecord } from '@/lib/supabase/repairs';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import { can } from '@/lib/permissions';
 import {
   emptyRepairRecordFormValues,
@@ -19,39 +22,38 @@ import {
 } from '@/lib/repair-form';
 import { registeredRoutes, repairDetailPath } from '@/lib/routes';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
 
 export default function RepairAddPage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const machineId = useMemo(() => new URLSearchParams(search).get('machine') ?? '', [search]);
   const [initialValues] = useState(() => emptyRepairRecordFormValues(machineId));
+  // Archived machines are excluded: a repair cannot be newly raised against a retired asset.
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository
-            .listMachinesForDepartment(current.id, scope)
-            .filter((machine) => !machine.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
 
   if (!can(user, 'repair:add')) return <UnauthorizedPage />;
   const submit = async (values: RepairRecordFormValues): Promise<RepairRecordFormSubmitResult> => {
-    const result = mockRepository.createRepairRecord(
-      formValuesToRepairRecordInput(values),
-      user?.id ?? 'unknown',
-    );
+    // No actor argument: the audit trigger records `auth.uid()` server-side.
+    const result = await createRepairRecord(formValuesToRepairRecordInput(values));
     if (!result.ok)
       return {
         ok: false,
         message: result.message,
         field: result.reason === 'unknown_machine' ? 'machineId' : undefined,
       };
+    await queryClient.invalidateQueries({ queryKey: ['repairs'] });
     setLocation(repairDetailPath(result.data.id));
     return { ok: true };
   };

@@ -12,8 +12,11 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createMaintenancePlan } from '@/lib/supabase/maintenance';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listTechnicians } from '@/lib/supabase/technicians';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import {
   emptyMaintenancePlanFormValues,
   formValuesToMaintenancePlanInput,
@@ -25,7 +28,7 @@ import UnauthorizedPage from '@/pages/UnauthorizedPage';
 export default function MaintenancePlanAddPage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
 
@@ -37,14 +40,19 @@ export default function MaintenancePlanAddPage() {
     emptyMaintenancePlanFormValues(presetMachineId),
   );
 
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository.listMachinesForDepartment(current.id, scope).filter((m) => !m.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
-  const technicians = useMemo(() => repository.listTechnicians(), [repository]);
+  const { data: technicians = [] } = useQuery({
+    queryKey: queryKeys.technicians.list(),
+    queryFn: listTechnicians,
+  });
 
   if (!can(user, 'maintenance:add')) {
     return <UnauthorizedPage />;
@@ -53,10 +61,7 @@ export default function MaintenancePlanAddPage() {
   const handleSubmit = async (
     values: MaintenancePlanFormValues,
   ): Promise<MaintenancePlanFormSubmitResult> => {
-    const result = mockRepository.createMaintenancePlan(
-      formValuesToMaintenancePlanInput(values),
-      user?.id ?? 'unknown',
-    );
+    const result = await createMaintenancePlan(formValuesToMaintenancePlanInput(values));
 
     if (!result.ok) {
       return {
@@ -66,6 +71,7 @@ export default function MaintenancePlanAddPage() {
       };
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setLocation(maintenancePath({ view: 'plans' }));
     return { ok: true };
   };

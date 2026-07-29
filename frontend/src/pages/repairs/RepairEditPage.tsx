@@ -10,7 +10,6 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useAuth } from '@/hooks/use-auth';
-import { mockRepository } from '@/lib/mock-repository';
 import { can } from '@/lib/permissions';
 import {
   formValuesToRepairRecordInput,
@@ -20,31 +19,42 @@ import {
 import { isOpenRepair } from '@/lib/repair-record';
 import { registeredRoutes, repairDetailPath } from '@/lib/routes';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getRepairRecordInScope, updateRepairRecord } from '@/lib/supabase/repairs';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
 
 export default function RepairEditPage() {
   const [, params] = useRoute(registeredRoutes.repairEdit);
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const repairId = params?.id;
-  const repair = useMemo(
-    () => (repairId ? repository.getRepairRecordInScope(repairId, scope) : undefined),
-    [repairId, repository, scope],
-  );
+  const { data: repair, isPending } = useQuery({
+    queryKey: queryKeys.repairs.detail(repairId ?? ''),
+    queryFn: () => getRepairRecordInScope(repairId ?? '', scope),
+    enabled: Boolean(repairId) && scope.departmentIds.length > 0,
+  });
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository
-            .listMachinesForDepartment(current.id, scope)
-            .filter((machine) => !machine.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
   const values = useMemo(() => (repair ? repairRecordToFormValues(repair) : null), [repair]);
   if (!can(user, 'repair:edit')) return <UnauthorizedPage />;
+  if (isPending)
+    return (
+      <div className="mx-auto max-w-2xl">
+        <LoadingState label="Loading repair…" />
+      </div>
+    );
   if (!repair || !values)
     return (
       <div className="max-w-2xl">
@@ -60,17 +70,14 @@ export default function RepairEditPage() {
       </div>
     );
   const submit = async (next: RepairRecordFormValues): Promise<RepairRecordFormSubmitResult> => {
-    const result = mockRepository.updateRepairRecord(
-      repair.id,
-      formValuesToRepairRecordInput(next),
-      user?.id ?? 'unknown',
-    );
+    const result = await updateRepairRecord(repair.id, formValuesToRepairRecordInput(next));
     if (!result.ok)
       return {
         ok: false,
         message: result.message,
         field: result.reason === 'unknown_machine' ? 'machineId' : undefined,
       };
+    await queryClient.invalidateQueries({ queryKey: ['repairs'] });
     setLocation(repairDetailPath(repair.id));
     return { ok: true };
   };

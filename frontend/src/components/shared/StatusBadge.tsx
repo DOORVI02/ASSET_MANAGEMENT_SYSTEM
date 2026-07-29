@@ -68,7 +68,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
   // This used to capitalise every word, so a badge announced "Waiting For Parts" while
   // `repair-record.ts` defined the label "Waiting for parts" — one status with two
   // spellings depending on which component rendered it. Sentence case is the convention
-  // the label maps in `repair-record.ts`, `maintenance-record.ts`, `mock-repository.ts`,
+  // the label maps in `repair-record.ts` and `maintenance-record.ts`,
   // and `MachineForm.tsx` now all follow.
   label = label.charAt(0).toUpperCase() + label.slice(1);
 

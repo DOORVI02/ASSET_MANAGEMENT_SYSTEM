@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowLeft, Pencil, Play, Trash2, Wrench, XCircle } from 'lucide-react';
 import { Link, useRoute } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,6 @@ import { ImageUploader } from '@/components/shared/ImageUploader';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useAuth } from '@/hooks/use-auth';
-import { mockRepository } from '@/lib/mock-repository';
 import { can } from '@/lib/permissions';
 import {
   repairCompletionSchema,
@@ -31,7 +30,18 @@ import { isOpenRepair } from '@/lib/repair-record';
 import { machineDetailPath, registeredRoutes, repairEditPath } from '@/lib/routes';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  cancelRepairRecord,
+  completeRepairRecord,
+  getRepairRecordInScope,
+  listRepairAttachments,
+  startRepairRecord,
+  waitForRepairParts,
+} from '@/lib/supabase/repairs';
+import { deleteCloudinaryAttachment, uploadAndFinalizeImage } from '@/lib/supabase/attachments';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import type { FeedbackMessage as FeedbackModel } from '@/lib/types';
 import UnauthorizedPage from '@/pages/UnauthorizedPage';
 
@@ -39,19 +49,28 @@ export default function RepairDetailPage() {
   const [, params] = useRoute(registeredRoutes.repairDetail);
   const { user } = useAuth();
   const { scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<FeedbackModel | null>(null);
   const repairId = params?.id;
-  const repair = useMemo(
-    () => (repairId ? repository.getRepairRecordInScope(repairId, scope) : undefined),
-    [repairId, repository, scope],
-  );
-  const evidence = useMemo(
-    () => (repair ? repository.listRepairAttachments(repair.id) : []),
-    [repair, repository],
-  );
+  const { data: repair, isPending } = useQuery({
+    queryKey: queryKeys.repairs.detail(repairId ?? ''),
+    queryFn: () => getRepairRecordInScope(repairId ?? '', scope),
+    enabled: Boolean(repairId) && scope.departmentIds.length > 0,
+  });
+
+  const { data: evidence = [] } = useQuery({
+    queryKey: [...queryKeys.repairs.detail(repairId ?? ''), 'attachments'],
+    queryFn: () => listRepairAttachments(repairId ?? ''),
+    enabled: Boolean(repairId) && scope.departmentIds.length > 0,
+  });
   const canEdit = can(user, 'repair:edit');
   if (!can(user, 'repair:view')) return <UnauthorizedPage />;
+  if (isPending)
+    return (
+      <div className="mx-auto max-w-2xl">
+        <LoadingState label="Loading repair…" />
+      </div>
+    );
   if (!repair)
     return (
       // `mx-auto` matches the other three detail pages' not-found state. Without it,
@@ -70,31 +89,64 @@ export default function RepairDetailPage() {
       </div>
     );
   const open = isOpenRepair(repair);
-  const invoke = (action: () => { ok: true } | { ok: false; message: string }) => {
-    const result = action();
+  const invoke = async (
+    action: () => Promise<{ ok: true } | { ok: false; message: string }>,
+  ) => {
+    const result = await action();
+    // Refetch on both outcomes: a rejected transition usually means the record already
+    // moved on, and showing the stale status next to "not updated" is what makes that
+    // confusing rather than informative.
+    await queryClient.invalidateQueries({ queryKey: ['repairs'] });
     setFeedback(
       result.ok
-        ? {
-            state: 'success',
-            title: 'Repair updated',
-            description: 'The in-memory preview store has been updated.',
-          }
+        ? { state: 'success', title: 'Repair updated', description: 'The repair record has been updated.' }
         : { state: 'validation', title: 'Repair not updated', description: result.message },
     );
   };
-  const upload = (file: File) =>
-    invoke(() =>
-      mockRepository.addRepairAttachment(
-        repair.id,
-        {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          url: URL.createObjectURL(file),
-        },
-        user?.id ?? 'unknown',
-      ),
-    );
+  /**
+   * Deletes the Cloudinary asset and its `attachments` row together, through
+   * `cloudinary-delete`. Removing only the row would orphan the asset in Cloudinary —
+   * exactly the drift `reconcile-cloudinary-orphans.mjs` exists to find.
+   */
+  const removeEvidence = async (attachmentId: string) => {
+    try {
+      await deleteCloudinaryAttachment(attachmentId);
+      await queryClient.invalidateQueries({ queryKey: ['repairs'] });
+      setFeedback({
+        state: 'success',
+        title: 'Evidence removed',
+        description: 'The image was deleted from this repair.',
+      });
+    } catch (deleteError) {
+      setFeedback({
+        state: 'validation',
+        title: 'Could not remove image',
+        description:
+          deleteError instanceof Error ? deleteError.message : 'The image could not be removed.',
+      });
+    }
+  };
+
+  const upload = async (file: File) => {
+    // The full sign -> upload -> finalize sequence. A `URL.createObjectURL` blob, which is
+    // what this used to store, is meaningless outside the tab that created it — writing one
+    // to the database would produce a row that renders as a broken image everywhere else.
+    try {
+      await uploadAndFinalizeImage({ entityType: 'repair', entityId: repair.id, file });
+      await queryClient.invalidateQueries({ queryKey: ['repairs'] });
+      setFeedback({
+        state: 'success',
+        title: 'Evidence added',
+        description: `${file.name} was uploaded to this repair.`,
+      });
+    } catch (uploadError) {
+      setFeedback({
+        state: 'validation',
+        title: 'Upload failed',
+        description: uploadError instanceof Error ? uploadError.message : 'The image could not be uploaded.',
+      });
+    }
+  };
   return (
     <div className="max-w-6xl space-y-6">
       <Link href={registeredRoutes.repairs}>
@@ -119,7 +171,7 @@ export default function RepairDetailPage() {
             {canEdit && repair.status === 'reported' ? (
               <Button
                 onClick={() =>
-                  invoke(() => mockRepository.startRepairRecord(repair.id, user?.id ?? 'unknown'))
+                  invoke(() => startRepairRecord(repair.id))
                 }
               >
                 <Play size={16} className="mr-2" aria-hidden="true" />
@@ -129,7 +181,7 @@ export default function RepairDetailPage() {
             {canEdit && repair.status === 'waiting_for_parts' ? (
               <Button
                 onClick={() =>
-                  invoke(() => mockRepository.startRepairRecord(repair.id, user?.id ?? 'unknown'))
+                  invoke(() => startRepairRecord(repair.id))
                 }
               >
                 <Play size={16} className="mr-2" aria-hidden="true" />
@@ -142,7 +194,7 @@ export default function RepairDetailPage() {
                   variant="outline"
                   onClick={() =>
                     invoke(() =>
-                      mockRepository.waitForRepairParts(repair.id, user?.id ?? 'unknown'),
+                      waitForRepairParts(repair.id),
                     )
                   }
                 >
@@ -150,7 +202,6 @@ export default function RepairDetailPage() {
                 </Button>
                 <CompleteDialog
                   repairId={repair.id}
-                  actorId={user?.id ?? 'unknown'}
                   onResult={setFeedback}
                 />
               </>
@@ -158,7 +209,6 @@ export default function RepairDetailPage() {
             {canEdit && open ? (
               <CancelDialog
                 repairId={repair.id}
-                actorId={user?.id ?? 'unknown'}
                 onResult={setFeedback}
               />
             ) : null}
@@ -254,13 +304,7 @@ export default function RepairDetailPage() {
                       description={`Remove ${attachment.fileName} from this repair?`}
                       confirmText="Remove image"
                       onConfirm={() =>
-                        invoke(() =>
-                          mockRepository.removeRepairAttachment(
-                            repair.id,
-                            attachment.id,
-                            user?.id ?? 'unknown',
-                          ),
-                        )
+                        void removeEvidence(attachment.id)
                       }
                       variant="destructive"
                     />
@@ -305,11 +349,9 @@ function Item({
 
 function CompleteDialog({
   repairId,
-  actorId,
   onResult,
 }: {
   repairId: string;
-  actorId: string;
   onResult: (feedback: FeedbackModel) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -319,13 +361,13 @@ function CompleteDialog({
     downtimeHours: undefined,
   });
   const [error, setError] = useState<string | null>(null);
-  const complete = () => {
+  const complete = async () => {
     const parsed = repairCompletionSchema.safeParse(values);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Check the completion fields.');
       return;
     }
-    const result = mockRepository.completeRepairRecord(repairId, actorId, parsed.data);
+    const result = await completeRepairRecord(repairId, parsed.data);
     if (result.ok) {
       setOpen(false);
       onResult({
@@ -396,23 +438,21 @@ function CompleteDialog({
 
 function CancelDialog({
   repairId,
-  actorId,
   onResult,
 }: {
   repairId: string;
-  actorId: string;
   onResult: (feedback: FeedbackModel) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const cancel = () => {
+  const cancel = async () => {
     const parsed = repairCancellationSchema.safeParse({ reason });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Enter a reason.');
       return;
     }
-    const result = mockRepository.cancelRepairRecord(repairId, actorId, parsed.data.reason);
+    const result = await cancelRepairRecord(repairId, parsed.data.reason);
     if (result.ok) {
       setOpen(false);
       onResult({

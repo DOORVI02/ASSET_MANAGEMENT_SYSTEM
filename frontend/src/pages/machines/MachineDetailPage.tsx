@@ -16,11 +16,15 @@ import { DUE_SOON_WINDOW_DAYS, isDueSoon, isOverdue } from '@/lib/maintenance-wi
 import { maintenanceDueState } from '@/lib/maintenance-record';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
-import { useMockRepository } from '@/hooks/use-mock-repository';
 import { useDepartment } from '@/hooks/use-department';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
-import { archiveMachine, getMachineInScope, restoreMachine } from '@/lib/supabase/machines';
+import {
+  archiveMachine,
+  getMachineImage,
+  getMachineInScope,
+  restoreMachine,
+} from '@/lib/supabase/machines';
 import { listAllPartsForMachine } from '@/lib/supabase/parts';
 import { listAllMaintenanceForMachine } from '@/lib/supabase/maintenance';
 import { listAllRepairsForMachine } from '@/lib/supabase/repairs';
@@ -40,7 +44,6 @@ import type { FeedbackMessage as FeedbackModel } from '@/lib/types';
 export default function MachineDetailPage() {
   const [, params] = useRoute(registeredRoutes.machineDetail);
   const { user } = useAuth();
-  const repository = useMockRepository();
   const { scope } = useDepartment();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('overview');
@@ -104,17 +107,11 @@ export default function MachineDetailPage() {
     enabled: actorIds.length > 0,
   });
 
-  /**
-   * The one surface in this domain still on the mock repository. The Images tab needs the
-   * Cloudinary upload path wired through `ImageUploader`, which is mid-edit; reading the
-   * real attachment row here while uploads still went to an in-memory store would make the
-   * tab visibly lie — an upload would appear to succeed and then vanish on reload. Keeping
-   * both halves on the mock leaves it self-consistent until the real upload lands.
-   */
-  const machineImage = useMemo(
-    () => (machineId ? repository.getMachineImage(machineId) : undefined),
-    [machineId, repository],
-  );
+  const { data: machineImage, refetch: refetchImage } = useQuery({
+    queryKey: queryKeys.machines.image(machineId ?? ''),
+    queryFn: () => getMachineImage(machineId ?? ''),
+    enabled,
+  });
 
   if (isPending) {
     return (
@@ -591,7 +588,7 @@ export default function MachineDetailPage() {
             image={machineImage}
             canManage={canManageImages}
             isArchived={machine.isArchived}
-            actorId={user?.id ?? 'unknown'}
+            onChanged={() => refetchImage()}
           />
         </TabsContent>
 

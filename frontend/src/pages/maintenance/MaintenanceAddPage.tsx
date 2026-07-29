@@ -12,8 +12,11 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
-import { mockRepository } from '@/lib/mock-repository';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createMaintenanceRecord } from '@/lib/supabase/maintenance';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listTechnicians } from '@/lib/supabase/technicians';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import {
   emptyMaintenanceRecordFormValues,
   formValuesToMaintenanceRecordInput,
@@ -25,7 +28,7 @@ import UnauthorizedPage from '@/pages/UnauthorizedPage';
 export default function MaintenanceAddPage() {
   const { user } = useAuth();
   const { current, scope } = useDepartment();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
 
@@ -41,14 +44,20 @@ export default function MaintenanceAddPage() {
     emptyMaintenanceRecordFormValues(presetMachineId, presetPlanId),
   );
 
+  // Archived machines are excluded: work cannot be newly scheduled against a retired asset.
+  const { data: machinesInScope = [] } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), current?.id ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, current?.id),
+    enabled: Boolean(current) && scope.departmentIds.length > 0,
+  });
   const machines = useMemo(
-    () =>
-      current
-        ? repository.listMachinesForDepartment(current.id, scope).filter((m) => !m.isArchived)
-        : [],
-    [current, repository, scope],
+    () => machinesInScope.filter((machine) => !machine.isArchived),
+    [machinesInScope],
   );
-  const technicians = useMemo(() => repository.listTechnicians(), [repository]);
+  const { data: technicians = [] } = useQuery({
+    queryKey: queryKeys.technicians.list(),
+    queryFn: listTechnicians,
+  });
 
   if (!can(user, 'maintenance:add')) {
     return <UnauthorizedPage />;
@@ -57,10 +66,8 @@ export default function MaintenanceAddPage() {
   const handleSubmit = async (
     values: MaintenanceRecordFormValues,
   ): Promise<MaintenanceRecordFormSubmitResult> => {
-    const result = mockRepository.createMaintenanceRecord(
-      formValuesToMaintenanceRecordInput(values),
-      user?.id ?? 'unknown',
-    );
+    // No actor argument: the audit trigger records `auth.uid()` server-side.
+    const result = await createMaintenanceRecord(formValuesToMaintenanceRecordInput(values));
 
     if (!result.ok) {
       return {
@@ -70,6 +77,7 @@ export default function MaintenanceAddPage() {
       };
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['maintenance'] });
     setLocation(maintenanceDetailPath(result.data.id));
     return { ok: true };
   };

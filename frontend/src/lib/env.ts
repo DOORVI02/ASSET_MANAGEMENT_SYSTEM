@@ -5,9 +5,9 @@
  * project URL and the publishable ("anon") key belong here — never a service-role key
  * or Cloudinary secret (`.agents/plan.md` section 15).
  *
- * Validation is lazy (`getSupabaseEnv()` throws only when called), not at module load,
- * so importing this file cannot crash the mock-data app before Phase 11 wires in real
- * Supabase calls. That is also why nothing in `src/App.tsx` imports it yet.
+ * Validation is lazy (`getSupabaseEnv()` throws only when called), not at module load, so
+ * importing this file cannot crash the app at import time — a missing variable surfaces as a
+ * readable error from the first query instead of a blank page.
  */
 
 export interface SupabaseEnv {
