@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { isValidElement, useMemo, type ReactNode } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import {
   AlertTriangle,
@@ -53,6 +53,28 @@ interface ReportTable {
   rows: ReportRow[];
   /** Names the from/to range so it is never ambiguous which date is filtered. */
   dateLabel?: string;
+}
+
+/**
+ * Flattens a rendered cell back to text for export.
+ *
+ * Most cells are already strings or numbers. Status cells are `<StatusBadge>` elements, whose
+ * `status` prop is the underlying value — reading it keeps the export in step with the table
+ * automatically, rather than duplicating each report's data shaping a second time just for
+ * CSV, where the two could drift apart.
+ */
+function cellText(cell: ReactNode): string {
+  if (cell === null || cell === undefined || typeof cell === 'boolean') return '';
+  if (typeof cell === 'string' || typeof cell === 'number') return String(cell);
+  if (isValidElement<{ status?: string }>(cell) && typeof cell.props.status === 'string') {
+    return cell.props.status.replace(/_/g, ' ');
+  }
+  return '';
+}
+
+/** RFC 4180 quoting: a field containing a comma, quote or newline must be quoted, and its own quotes doubled. */
+function toCsvField(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 type ReportId =
@@ -437,12 +459,30 @@ export default function ReportsPage() {
   const activeFilterCount = (query ? 1 : 0) + (from || to ? 1 : 0);
 
   const handleExport = () => {
-    // Deliberately does not produce a file. plan.md defers real PDF/Excel generation
-    // to the backend phase, and a download that silently produced nothing would be
-    // exactly the "fake success" the working rules prohibit.
-    toast.info('Export is not available in preview', {
-      description:
-        'Report data is served from the in-memory preview store. File generation arrives with the backend phase.',
+    // `current` is guaranteed by the guard below, but the export closure is defined above it.
+    if (!table || !selectedDefinition || !current) return;
+
+    // Exports exactly the rows on screen, filters and all — an export that quietly
+    // returned the unfiltered set would disagree with what the user is looking at.
+    const csv = [
+      table.columns.map(toCsvField).join(','),
+      ...filteredRows.map((row) => row.cells.map((cell) => toCsvField(cellText(cell))).join(',')),
+    ].join('\r\n');
+
+    // The BOM is what makes Excel read this as UTF-8 rather than the local codepage, which
+    // otherwise mangles any non-ASCII text in a machine name or location.
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedDefinition.id}-${current.code}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    toast.success('Report exported', {
+      description: `${filteredRows.length} row${filteredRows.length === 1 ? '' : 's'} written to CSV.`,
     });
   };
 
@@ -487,9 +527,9 @@ export default function ReportsPage() {
       <FeedbackMessage
         feedback={{
           state: 'validation',
-          title: 'Preview reports',
+          title: 'Export produces CSV',
           description:
-            'Figures come from the in-memory preview store, and Export does not generate a file yet. Real report data and PDF/Excel output arrive with the backend phase.',
+            'Figures are live from the database. Export writes the rows currently on screen — filters included — as a CSV file. PDF output is not implemented.',
         }}
       />
 
