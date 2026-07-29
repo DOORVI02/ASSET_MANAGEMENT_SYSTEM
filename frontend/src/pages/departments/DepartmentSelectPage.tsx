@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { useQueries } from '@tanstack/react-query';
 import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useDepartment } from '@/hooks/use-department';
@@ -37,7 +38,18 @@ function cell(value: number | undefined, isPending: boolean): string {
 export default function DepartmentSelectPage() {
   const { available, current, scope, selectDepartment } = useDepartment();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const [search, setSearch] = useState('');
+
+  /**
+   * Set by the shell when it redirected the user here from a page they asked for. Says why
+   * they were moved, instead of leaving a silent bounce that looks like the rest of the app
+   * is missing — which is exactly how it read on a phone, where the nav sits behind a menu.
+   */
+  const wasRedirected = useMemo(
+    () => new URLSearchParams(searchString).get('required') === '1',
+    [searchString],
+  );
 
   /**
    * One query per department, read from the `department_summary` view rather than counted in
@@ -99,6 +111,17 @@ export default function DepartmentSelectPage() {
         title="Select a department"
         description="Choose the department you want to work in. Every list, count, and report is scoped to it."
       />
+
+      {wasRedirected ? (
+        <FeedbackMessage
+          feedback={{
+            state: 'validation',
+            title: 'Choose a department to continue',
+            description:
+              'Machines, parts, maintenance, repairs and reports are all scoped to one department, so one has to be selected before they can open. This is remembered on this device, so you will only be asked again on a new browser or after signing out.',
+          }}
+        />
+      ) : null}
 
       {available.length > 6 ? (
         <SearchBar

@@ -40,12 +40,20 @@ export function AppShell({ children }: AppShellProps) {
     }
   }, [user, isLoading, isPublicRoute, setLocation]);
 
-  // An Officer with several departments must pick one before any scoped page renders,
-  // otherwise a list would have no department to scope to.
+  /**
+   * An Officer with several departments must pick one before any scoped page renders,
+   * otherwise a list would have no department to scope to.
+   *
+   * The redirect carries `?required=1` so the selection screen can say *why* the user is
+   * there. Without it the bounce is silent, and on a fresh device — where nothing is stored
+   * yet — every navigation snaps back to this screen with no explanation. On a phone, where
+   * the nav sits behind a menu, that reads as "the app only has one page". Reported
+   * 2026-07-29 and reproduced on an iPhone viewport before this was changed.
+   */
   const needsDepartment = Boolean(user) && !isLoading && !current && canChoose;
   React.useEffect(() => {
     if (needsDepartment && location !== registeredRoutes.departments) {
-      setLocation(registeredRoutes.departments);
+      setLocation(`${registeredRoutes.departments}?required=1`);
     }
   }, [needsDepartment, location, setLocation]);
 
