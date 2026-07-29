@@ -70,6 +70,15 @@ export interface MachineTechnicalProfile {
   plummerBlockSize?: string;
 }
 
+/**
+ * A maintenance technician. Not an application user — technicians do not sign in, they are
+ * simply who a maintenance record or plan credits the work to.
+ */
+export interface Technician {
+  id: string;
+  name: string;
+}
+
 export interface Department {
   id: string;
   name: string;

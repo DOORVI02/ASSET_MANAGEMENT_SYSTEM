@@ -23,7 +23,7 @@ import {
   type MaintenanceRecordFormValues,
 } from '@/lib/maintenance-form';
 import type { Machine } from '@/lib/types';
-import type { Technician } from '@/lib/mock-data';
+import type { Technician } from '@/lib/types';
 
 export type MaintenanceRecordFormSubmitResult =
   { ok: true } | { ok: false; message: string; field?: keyof MaintenanceRecordFormValues };

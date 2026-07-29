@@ -33,6 +33,17 @@ describe('ImageUploader validation', () => {
     expect(fileInput().accept).toBe('image/jpeg,image/png,image/avif');
   });
 
+  it('keeps the native file input over the visible upload zone', () => {
+    render(<ImageUploader />);
+
+    // When macOS returns focus from its native picker, the browser scrolls the focused
+    // input into view. The input must therefore stay over this dropzone, rather than be
+    // an `sr-only` target positioned at the top of the document.
+    const input = fileInput();
+    expect(input).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full', 'opacity-0');
+    expect(input.parentElement).toHaveClass('relative');
+  });
+
   it('rejects an unsupported format inline rather than through a blocking dialog', async () => {
     // A failure here would previously have been an unhandled `alert()` call.
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});

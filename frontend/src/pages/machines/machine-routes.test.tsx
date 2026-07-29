@@ -238,6 +238,7 @@ describe('machine routes', () => {
 
       // Radix Select is keyboard driven; open it and pick the first department.
       await userEvent.click(screen.getByRole('combobox', { name: /Department/ }));
+      expect(await screen.findByRole('listbox')).toHaveClass('max-h-80', 'overflow-y-auto');
       await userEvent.click(await screen.findByRole('option', { name: /Sinter Plant 3/ }));
 
       await userEvent.click(screen.getByRole('button', { name: 'Create machine' }));

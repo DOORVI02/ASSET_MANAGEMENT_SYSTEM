@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '@/lib/supabase';
-import type { Technician } from '@/lib/mock-data';
+import type { Technician } from '@/lib/types';
 
 export async function listTechnicians(): Promise<Technician[]> {
   const client = getSupabaseClient();

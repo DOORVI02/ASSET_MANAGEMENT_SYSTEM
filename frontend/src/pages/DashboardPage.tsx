@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { DUE_SOON_WINDOW_DAYS } from '@/lib/maintenance-window';
 import { PageHeader } from '@/components/shared/PageHeader';
 
@@ -32,7 +33,12 @@ import {
 import { cn, formatDateTime } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { listAllMaintenanceInScope } from '@/lib/supabase/maintenance';
+import { listAllRepairsInScope } from '@/lib/supabase/repairs';
+import { getDepartmentSummary } from '@/lib/supabase/departments';
+import { queryKeys } from '@/lib/supabase/query-keys';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { isDueSoon, isOverdue } from '@/lib/maintenance-window';
 import {
@@ -46,20 +52,35 @@ import { can } from '@/lib/permissions';
 export default function DashboardPage() {
   const { user } = useAuth();
   const { current, available, scope } = useDepartment();
-  const repository = useMockRepository();
   const isOfficer = can(user, 'machine:add');
+  const departmentId = current?.id;
+  const enabled = Boolean(departmentId) && scope.departmentIds.length > 0;
 
   // Every count below comes from the same scoped machine list the drill-down links
   // resolve to, so a card can never disagree with the page it opens.
-  const machines = useMemo(
-    () => (current ? repository.listMachinesForDepartment(current.id, scope) : []),
-    [current, repository, scope],
-  );
+  const { data: machines = [], isPending: machinesPending } = useQuery({
+    queryKey: [...queryKeys.machines.inScope(scope.departmentIds), departmentId ?? ''],
+    queryFn: () => listAllMachinesInScope(scope, departmentId),
+    enabled,
+  });
 
-  const summary = useMemo(
-    () => (current ? repository.getDepartmentSummary(current.id, scope) : null),
-    [current, repository, scope],
-  );
+  const { data: summary, isPending: summaryPending } = useQuery({
+    queryKey: queryKeys.departments.summary(departmentId ?? ''),
+    queryFn: () => getDepartmentSummary(departmentId ?? '', scope),
+    enabled,
+  });
+
+  const { data: maintenanceRecords = [] } = useQuery({
+    queryKey: [...queryKeys.maintenance.all(departmentId ?? ''), 'dashboard'],
+    queryFn: () => listAllMaintenanceInScope(scope, departmentId),
+    enabled,
+  });
+
+  const { data: repairRecords = [] } = useQuery({
+    queryKey: [...queryKeys.repairs.all(departmentId ?? ''), 'dashboard'],
+    queryFn: () => listAllRepairsInScope(scope, departmentId),
+    enabled,
+  });
 
   const needsAttention = useMemo(
     () =>
@@ -77,33 +98,47 @@ export default function DashboardPage() {
 
   const upcomingMaintenance = useMemo(
     () =>
-      current
-        ? repository
-            .listMaintenanceForDepartment(current.id, scope)
-            .filter((record) => record.status === 'scheduled')
-            .sort(
-              (a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime(),
-            )
-            .slice(0, 5)
-        : [],
-    [current, repository, scope],
+      maintenanceRecords
+        .filter((record) => record.status === 'scheduled')
+        .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
+        .slice(0, 5),
+    [maintenanceRecords],
   );
 
-  const recentRepairs = useMemo(
-    () => (current ? repository.listRepairsForDepartment(current.id, scope).slice(0, 5) : []),
-    [current, repository, scope],
-  );
+  const recentRepairs = useMemo(() => repairRecords.slice(0, 5), [repairRecords]);
 
-  // Real per-department counts across the user's whole scope, replacing the old
-  // hard-coded chart data.
+  /**
+   * Per-department machine counts for the chart, one summary query each. Read from the
+   * `department_summary` view rather than by loading every department's machines — the chart
+   * needs one number per department, not the rows behind it.
+   */
+  const deptSummaryQueries = useQueries({
+    queries: available.map((department) => ({
+      queryKey: queryKeys.departments.summary(department.id),
+      queryFn: () => getDepartmentSummary(department.id, scope),
+      enabled: scope.departmentIds.length > 0,
+    })),
+  });
+
   const deptData = useMemo(
     () =>
-      available.map((department) => ({
+      available.map((department, index) => ({
         name: department.code,
-        count: repository.getDepartmentSummary(department.id, scope).total,
+        count: deptSummaryQueries[index]?.data?.total ?? 0,
       })),
-    [available, repository, scope],
+    [available, deptSummaryQueries],
   );
+
+  // A department is selected but its figures are still in flight. Rendering the cards now
+  // would show zeros that read as real counts, which is exactly the reading someone acts on.
+  if (current && (machinesPending || summaryPending)) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Dashboard" description={`Loading ${current.name}…`} />
+        <LoadingState label="Loading dashboard…" />
+      </div>
+    );
+  }
 
   if (!current || !summary) {
     return (

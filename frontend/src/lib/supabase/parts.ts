@@ -80,6 +80,23 @@ export async function listPartsInScope(params: PartListParams): Promise<PagedRes
 }
 
 /**
+ * All parts in scope, optionally narrowed to one department.
+ *
+ * For the screens that hold a complete list in the browser — the dashboard's derived
+ * "needs attention" grouping, the reports aggregations — where the filtering is over
+ * computed state the server-side params don't express. See `fetchAllPages`.
+ */
+export async function listAllPartsInScope(
+  scope: AccessScope,
+  departmentId?: string,
+): Promise<MachinePart[]> {
+  if (scope.departmentIds.length === 0) return [];
+  return fetchAllPages((page, pageSize) =>
+    listPartsInScope({ scope, departmentId, page, pageSize }),
+  );
+}
+
+/**
  * All parts fitted to one machine, as one array.
  *
  * The machine detail page renders the full history in a tab rather than a paged list, so it

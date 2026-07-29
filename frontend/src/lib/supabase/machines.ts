@@ -77,10 +77,18 @@ export async function listMachinesInScope(
  * none of which `MachineListFilters`' single-value params express. See `fetchAllPages` for
  * why this walks pages rather than requesting one large one.
  */
-export async function listAllMachinesInScope(scope: AccessScope): Promise<Machine[]> {
+export async function listAllMachinesInScope(
+  scope: AccessScope,
+  departmentId?: string,
+): Promise<Machine[]> {
   if (scope.departmentIds.length === 0) return [];
   return fetchAllPages((page, pageSize) =>
-    listMachinesInScope({ scope, page, pageSize }),
+    listMachinesInScope({
+      scope,
+      filters: departmentId ? { departmentId } : undefined,
+      page,
+      pageSize,
+    }),
   );
 }
 

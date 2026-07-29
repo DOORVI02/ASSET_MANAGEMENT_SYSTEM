@@ -1,14 +1,27 @@
 import { useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
+import { useQueries } from '@tanstack/react-query';
 import { ArrowLeft, Building2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SearchBar } from '@/components/shared/SearchBar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useDepartment } from '@/hooks/use-department';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { getDepartmentSummary } from '@/lib/supabase/departments';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import { DUE_SOON_WINDOW_DAYS } from '@/lib/maintenance-window';
 import { registeredRoutes } from '@/lib/routes';
+
+/**
+ * Renders a count, or an em dash while it is still being fetched.
+ *
+ * Showing 0 during loading would be a lie that reads as fact — "this department has no
+ * overdue machines" is exactly the kind of statement someone acts on.
+ */
+function cell(value: number | undefined, isPending: boolean): string {
+  if (isPending) return '—';
+  return String(value ?? 0);
+}
 
 /**
  * Officer landing page: choose which authorized department to work in.
@@ -23,17 +36,39 @@ import { registeredRoutes } from '@/lib/routes';
  */
 export default function DepartmentSelectPage() {
   const { available, current, scope, selectDepartment } = useDepartment();
-  const repository = useMockRepository();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState('');
 
+  /**
+   * One query per department, read from the `department_summary` view rather than counted in
+   * the browser — the view already aggregates status and due counts in SQL, and this screen
+   * would otherwise have to load every machine in every department just to display six
+   * numbers per card.
+   *
+   * `useQueries` rather than a loop of `useQuery`, because the number of departments is not
+   * known at compile time and varies per user (four for an Officer here, one for a
+   * Supervisor). Each card resolves independently, so one slow department does not hold up
+   * the rest.
+   */
+  const summaryQueries = useQueries({
+    queries: available.map((department) => ({
+      queryKey: queryKeys.departments.summary(department.id),
+      queryFn: () => getDepartmentSummary(department.id, scope),
+      enabled: scope.departmentIds.length > 0,
+    })),
+  });
+
   const summaries = useMemo(
     () =>
-      available.map((department) => ({
+      available.map((department, index) => ({
         department,
-        summary: repository.getDepartmentSummary(department.id, scope),
+        // A card renders as soon as its own query resolves; until then the counts read zero
+        // rather than blocking the whole grid. `isPending` distinguishes "still counting"
+        // from "counted, and the answer is zero".
+        summary: summaryQueries[index]?.data,
+        isPending: summaryQueries[index]?.isPending ?? true,
       })),
-    [available, repository, scope],
+    [available, summaryQueries],
   );
 
   const filtered = useMemo(() => {
@@ -88,7 +123,7 @@ export default function DepartmentSelectPage() {
         />
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map(({ department, summary }) => (
+          {filtered.map(({ department, summary, isPending }) => (
             <li key={department.id}>
               <button
                 type="button"
@@ -112,30 +147,32 @@ export default function DepartmentSelectPage() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Machines</dt>
-                    <dd className="font-medium">{summary.total}</dd>
+                    <dd className="font-medium">{cell(summary?.total, isPending)}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Active</dt>
-                    <dd className="font-medium">{summary.active}</dd>
+                    <dd className="font-medium">{cell(summary?.active, isPending)}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Maint.</dt>
-                    <dd className="font-medium">{summary.underMaintenance}</dd>
+                    <dd className="font-medium">{cell(summary?.underMaintenance, isPending)}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Repair</dt>
-                    <dd className="font-medium">{summary.underRepair}</dd>
+                    <dd className="font-medium">{cell(summary?.underRepair, isPending)}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Due {DUE_SOON_WINDOW_DAYS}d</dt>
-                    <dd className="font-medium">{summary.dueSoon}</dd>
+                    <dd className="font-medium">{cell(summary?.dueSoon, isPending)}</dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-muted-foreground">Overdue</dt>
                     <dd
-                      className={summary.overdue > 0 ? 'font-semibold text-red-600' : 'font-medium'}
+                      className={
+                        (summary?.overdue ?? 0) > 0 ? 'font-semibold text-red-600' : 'font-medium'
+                      }
                     >
-                      {summary.overdue}
+                      {cell(summary?.overdue, isPending)}
                     </dd>
                   </div>
                 </dl>

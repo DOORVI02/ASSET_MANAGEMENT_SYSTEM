@@ -136,7 +136,7 @@ export function ImageUploader({ onUpload, className, defaultImage }: ImageUpload
       {!previewUrl ? (
         <label
           className={cn(
-            'flex h-48 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-muted/40 transition-colors hover:bg-muted',
+            'relative flex h-48 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-muted/40 transition-colors hover:bg-muted',
             'focus-within:outline-none focus-within:ring-2 focus-within:ring-ring',
             isDragging ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-input',
             error && 'border-destructive/60',
@@ -160,7 +160,11 @@ export function ImageUploader({ onUpload, className, defaultImage }: ImageUpload
           <input
             ref={inputRef}
             type="file"
-            className="sr-only"
+            // Keep the native control at the dropzone's actual location. `sr-only` makes
+            // the input an absolutely positioned 1px target; without a positioned parent
+            // it resolves at the top of the document, and browsers scroll there when the
+            // macOS file chooser returns focus.
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             accept={ACCEPTED_IMAGE_TYPES.join(',')}
             aria-describedby={error ? `${hintId} ${errorId}` : hintId}
             aria-invalid={error ? true : undefined}

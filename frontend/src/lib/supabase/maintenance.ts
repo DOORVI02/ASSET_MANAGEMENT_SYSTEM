@@ -83,6 +83,23 @@ export async function listMaintenanceInScope(
 }
 
 /**
+ * All maintenance records in scope, optionally narrowed to one department.
+ *
+ * For the screens that hold a complete list in the browser — the dashboard's derived
+ * "needs attention" grouping, the reports aggregations — where the filtering is over
+ * computed state the server-side params don't express. See `fetchAllPages`.
+ */
+export async function listAllMaintenanceInScope(
+  scope: AccessScope,
+  departmentId?: string,
+): Promise<MaintenanceRecord[]> {
+  if (scope.departmentIds.length === 0) return [];
+  return fetchAllPages((page, pageSize) =>
+    listMaintenanceInScope({ scope, departmentId, page, pageSize }),
+  );
+}
+
+/**
  * All one machine's maintenance history, as one array.
  *
  * The machine detail page renders the full history in a tab rather than a paged list, so it

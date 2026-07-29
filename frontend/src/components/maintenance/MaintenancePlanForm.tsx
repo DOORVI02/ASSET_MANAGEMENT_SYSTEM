@@ -25,7 +25,7 @@ import {
   type MaintenancePlanFormValues,
 } from '@/lib/maintenance-form';
 import type { Machine } from '@/lib/types';
-import type { Technician } from '@/lib/mock-data';
+import type { Technician } from '@/lib/types';
 
 export type MaintenancePlanFormSubmitResult =
   { ok: true } | { ok: false; message: string; field?: keyof MaintenancePlanFormValues };
