@@ -33,7 +33,16 @@ interface MachineFormProps {
   initialValues: MachineFormValues;
   departments: Department[];
   /** Case-insensitive duplicate check against the current register, excluding self. */
-  isCodeTaken: (code: string) => boolean;
+  /**
+   * Advisory duplicate check, run against the server as the user types.
+   *
+   * Async since the 2026-07-29 cutover: the answer now comes from the database rather than
+   * an in-memory list. It is deliberately *advisory* — the authoritative check is the
+   * `machines_code_key` unique constraint, surfaced by `createMachine`/`updateMachine` as a
+   * submit error on this field. Any check-then-insert has a window between the two steps
+   * that a concurrent database can lose, so this exists to warn early, not to guarantee.
+   */
+  isCodeTaken: (code: string) => Promise<boolean>;
   onSubmit: (values: MachineFormValues) => Promise<MachineFormSubmitResult>;
   onCancel: () => void;
   /** Machine image UI, rendered inside the form's own section. */
@@ -81,10 +90,44 @@ export function MachineForm({
     return () => window.removeEventListener('beforeunload', warn);
   }, [isDirty, isSubmitting]);
 
-  const duplicateCode = useMemo(() => {
-    const trimmed = values.code.trim();
-    return trimmed.length > 0 && isCodeTaken(trimmed);
-  }, [values.code, isCodeTaken]);
+  /**
+   * The code that the server most recently reported as already in use, rather than a plain
+   * boolean.
+   *
+   * Storing the *term* makes the warning derivable, which removes two problems at once: it
+   * cannot be left standing against a code the user has since edited, and clearing it needs
+   * no synchronous setState in the effect below (which would cascade a render on every
+   * keystroke). An answer that arrives for a stale term simply stops matching and stops
+   * showing.
+   */
+  const [takenCode, setTakenCode] = useState<string | null>(null);
+  const trimmedCode = values.code.trim();
+  const duplicateCode = takenCode !== null && takenCode === trimmedCode;
+
+  /**
+   * Debounced, because this is a network round trip since the 2026-07-29 cutover rather than
+   * an array scan — one request per keystroke would be wasteful and racy.
+   *
+   * Errors are swallowed deliberately: this warning is a convenience, and a failed lookup
+   * must not block a submit that the database is about to adjudicate correctly anyway.
+   */
+  useEffect(() => {
+    if (trimmedCode.length === 0) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void isCodeTaken(trimmedCode)
+        .then((taken) => {
+          if (!cancelled && taken) setTakenCode(trimmedCode);
+        })
+        .catch(() => undefined);
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [trimmedCode, isCodeTaken]);
 
   const setField = useCallback(
     <K extends keyof MachineFormValues>(field: K, value: MachineFormValues[K]) => {
@@ -240,7 +283,9 @@ export function MachineForm({
               <SelectTrigger {...fieldAria('machine-departmentId', combinedError('departmentId'))}>
                 <SelectValue placeholder="Select a department" />
               </SelectTrigger>
-              <SelectContent>
+              {/* There are 21 provisional departments. Keep this long list in the same
+                  bounded, scrollable Radix menu pattern as the other form selects. */}
+              <SelectContent className="max-h-80 custom-scrollbar">
                 {departments.map((department) => (
                   <SelectItem key={department.id} value={department.id}>
                     {department.name} ({department.code})

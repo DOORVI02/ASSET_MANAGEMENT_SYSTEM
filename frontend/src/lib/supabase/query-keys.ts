@@ -8,6 +8,16 @@
  * queryKeys.machines.all(departmentId) })` correctly invalidates every filtered/paged
  * variant under it — a bare string key could not express that.
  */
+/**
+ * A scope is a set of department ids, and the same set can arrive in different orders from
+ * different call sites. Sorting and joining makes the key depend on the set rather than on
+ * the array, so two components asking for the same scope share one cache entry instead of
+ * silently fetching twice.
+ */
+function scopeKey(departmentIds: readonly string[]): string {
+  return [...departmentIds].sort().join(',');
+}
+
 export const queryKeys = {
   departments: {
     all: () => ['departments'] as const,
@@ -18,7 +28,11 @@ export const queryKeys = {
     all: (departmentId: string) => ['machines', departmentId] as const,
     list: (departmentId: string, filters: unknown) =>
       ['machines', departmentId, 'list', filters] as const,
+    inScope: (departmentIds: readonly string[]) =>
+      ['machines', 'scope', scopeKey(departmentIds)] as const,
     detail: (machineId: string) => ['machines', 'detail', machineId] as const,
+    image: (machineId: string) => ['machines', 'detail', machineId, 'image'] as const,
+    audit: (machineId: string) => ['machines', 'detail', machineId, 'audit'] as const,
   },
   parts: {
     all: (departmentId: string) => ['parts', departmentId] as const,

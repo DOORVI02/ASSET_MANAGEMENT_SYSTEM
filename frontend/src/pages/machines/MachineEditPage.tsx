@@ -1,15 +1,18 @@
 import { useCallback, useMemo } from 'react';
 import { Link, useLocation, useRoute } from 'wouter';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { Button } from '@/components/ui/button';
 import { MachineForm, type MachineFormSubmitResult } from '@/components/machines/MachineForm';
 import { useAuth } from '@/hooks/use-auth';
 import { can } from '@/lib/permissions';
-import { mockRepository } from '@/lib/mock-repository';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { getMachineInScope, isMachineCodeTaken, updateMachine } from '@/lib/supabase/machines';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import { useDepartment } from '@/hooks/use-department';
 import {
   formValuesToMachineInput,
@@ -23,27 +26,36 @@ export default function MachineEditPage() {
   const [, params] = useRoute(registeredRoutes.machineEdit);
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const repository = useMockRepository();
-  const { scope } = useDepartment();
+  const queryClient = useQueryClient();
+  const { scope, available: departments } = useDepartment();
   const machineId = params?.id;
 
-  const departments = useMemo(() => repository.listDepartments(), [repository]);
-  const machine = useMemo(
-    () => (machineId ? repository.getMachineInScope(machineId, scope) : undefined),
-    [machineId, repository, scope],
-  );
+  const {
+    data: machine,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.machines.detail(machineId ?? ''),
+    queryFn: () => getMachineInScope(machineId ?? '', scope),
+    enabled: Boolean(machineId) && scope.departmentIds.length > 0,
+  });
 
-  // Snapshot the form's starting values once so later repository writes do not
-  // reset fields the user is still editing.
+  /**
+   * Snapshot the form's starting values once, keyed on the machine id alone, so a background
+   * refetch of this query cannot reset fields the user is still editing.
+   */
   const initialValues = useMemo(
     () => (machine ? machineToFormValues(machine) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [machineId],
   );
 
-  // Reads the singleton directly so the check always sees the latest register.
+  // Excludes this machine, so a record keeping its own code is not reported as a duplicate
+  // of itself. Advisory only — see the prop's documentation on MachineForm.
   const isCodeTaken = useCallback(
-    (code: string) => mockRepository.isMachineCodeTaken(code, machineId),
+    (code: string) => isMachineCodeTaken(code, machineId),
     [machineId],
   );
 
@@ -51,12 +63,38 @@ export default function MachineEditPage() {
     return <UnauthorizedPage />;
   }
 
+  if (isPending) {
+    return (
+      <div className="max-w-2xl">
+        <LoadingState label="Loading machine…" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="max-w-2xl">
+        <ErrorState
+          title="Could not load this machine"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
+
+  /**
+   * Reached only once the query has resolved successfully, so this is genuinely "no such
+   * machine in your scope" rather than "not loaded yet". The preview could not draw that
+   * distinction: a synchronous repository had no loading state to be in, so a missing record
+   * and an unfetched one looked identical.
+   */
   if (!machine || !initialValues) {
     return (
       <div className="max-w-2xl">
         <EmptyState
           title="Machine not found"
-          description={`No machine matches the identifier "${machineId ?? ''}". It may have been removed from the register.`}
+          description={`No machine matches the identifier "${machineId ?? ''}". It may have been removed from the register, or belong to a department outside your access.`}
           action={
             <Link href="/machines">
               <Button variant="outline">
@@ -70,11 +108,7 @@ export default function MachineEditPage() {
   }
 
   const handleSubmit = async (values: MachineFormValues): Promise<MachineFormSubmitResult> => {
-    const result = mockRepository.updateMachine(
-      machine.id,
-      formValuesToMachineInput(values),
-      user?.id ?? 'unknown',
-    );
+    const result = await updateMachine(machine.id, formValuesToMachineInput(values));
 
     if (!result.ok) {
       return {
@@ -84,6 +118,7 @@ export default function MachineEditPage() {
       };
     }
 
+    await queryClient.invalidateQueries({ queryKey: ['machines'] });
     setLocation(machineDetailPath(machine.id));
     return { ok: true };
   };
@@ -110,16 +145,7 @@ export default function MachineEditPage() {
               'Archived machines are read-only. Restore it from the machine detail page before editing.',
           }}
         />
-      ) : (
-        <FeedbackMessage
-          feedback={{
-            state: 'validation',
-            title: 'Preview mode — data is not persisted',
-            description:
-              'Edits are saved to the in-memory preview store and reset on page reload. Supabase persistence arrives in a later phase.',
-          }}
-        />
-      )}
+      ) : null}
 
       {machine.isArchived ? null : (
         <MachineForm

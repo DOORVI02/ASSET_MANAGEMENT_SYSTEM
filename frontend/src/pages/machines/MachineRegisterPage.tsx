@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Pagination } from '@/components/shared/Pagination';
 import { ResponsiveRecordList } from '@/components/shared/ResponsiveRecordList';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { Button } from '@/components/ui/button';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { listAllMachinesInScope } from '@/lib/supabase/machines';
+import { queryKeys } from '@/lib/supabase/query-keys';
 import { useDepartment } from '@/hooks/use-department';
 import { DUE_SOON_WINDOW_DAYS, isDueSoon, isOverdue } from '@/lib/maintenance-window';
 import { Link, useLocation, useSearch } from 'wouter';
@@ -46,7 +50,6 @@ function parseStatuses(raw: string | null): MachineStatus[] {
 
 export default function MachineRegisterPage() {
   const { user } = useAuth();
-  const repository = useMockRepository();
   const { current, available, scope, canChoose } = useDepartment();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
@@ -107,20 +110,36 @@ export default function MachineRegisterPage() {
     });
   };
 
-  // Scoped at the data boundary: out-of-scope departments and, for Supervisors,
-  // archived machines are never returned.
+  /**
+   * Scoped at the data boundary, and now by RLS rather than by a repository argument:
+   * out-of-scope departments and, for Supervisors, archived machines never leave the
+   * database. `scope` is passed anyway so the query narrows server-side too and its cache
+   * key changes when the user's departments do.
+   */
+  const {
+    data: machinesInScope,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.machines.inScope(scope.departmentIds),
+    queryFn: () => listAllMachinesInScope(scope),
+    enabled: scope.departmentIds.length > 0,
+  });
+
   const allMachines = useMemo(() => {
-    // An explicit department filter wins over the current department, but is still
-    // intersected with the access scope inside the repository.
+    const rows = machinesInScope ?? [];
+    // The department narrowing that used to be three different repository calls is now one
+    // filter over one fetch. An explicit department filter wins over the current
+    // department; both are subsets of the scope the query already applied, so neither can
+    // widen access — the checkbox list itself is built from `available`, which is
+    // RLS-derived.
     if (deptFilters.length > 0) {
-      return deptFilters.flatMap((departmentId) =>
-        repository.listMachinesForDepartment(departmentId, scope),
-      );
+      return rows.filter((machine) => deptFilters.includes(machine.departmentId));
     }
-    return current
-      ? repository.listMachinesForDepartment(current.id, scope)
-      : repository.listMachinesInScope(scope);
-  }, [repository, current, scope, deptFilters]);
+    return current ? rows.filter((machine) => machine.departmentId === current.id) : rows;
+  }, [machinesInScope, current, deptFilters]);
 
   const filteredMachines = useMemo(() => {
     let result = allMachines;
@@ -367,204 +386,220 @@ export default function MachineRegisterPage() {
         </CollapsibleContent>
       </Collapsible>
 
-      <ResponsiveRecordList
-        isEmpty={filteredMachines.length === 0}
-        table={
-          <table className="w-full">
-            <caption className="sr-only">
-              Machine register, {filteredMachines.length} matching machines
-            </caption>
-            <thead className="bg-muted/30">
-              <tr className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b">
-                <th
-                  scope="col"
-                  className="px-4 py-3"
-                  aria-sort={
-                    sortColumn === 'code'
-                      ? sortDirection === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <button
-                    onClick={() => handleSort('code')}
-                    className="flex items-center gap-1 hover:text-foreground"
+      {/* Loading and failure are distinct from "no machines": an empty register is a real,
+          expected state with its own call to action, while a failed fetch must offer a retry
+          rather than quietly implying the plant owns no equipment. */}
+      {isPending ? (
+        <LoadingState label="Loading machines…" />
+      ) : isError ? (
+        <ErrorState
+          title="Could not load the machine register"
+          message={error instanceof Error ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
+      ) : (
+        <>
+        <ResponsiveRecordList
+          isEmpty={filteredMachines.length === 0}
+          table={
+            <table className="w-full">
+              <caption className="sr-only">
+                Machine register, {filteredMachines.length} matching machines
+              </caption>
+              <thead className="bg-muted/30">
+                <tr className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b">
+                  <th
+                    scope="col"
+                    className="px-4 py-3"
+                    aria-sort={
+                      sortColumn === 'code'
+                        ? sortDirection === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : 'none'
+                    }
                   >
-                    Code{' '}
-                    {sortColumn === 'code' &&
-                      (sortDirection === 'asc' ? (
-                        <ChevronUp size={14} />
-                      ) : (
-                        <ChevronDown size={14} />
-                      ))}
-                  </button>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3"
-                  aria-sort={
-                    sortColumn === 'name'
-                      ? sortDirection === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                >
-                  <button
-                    onClick={() => handleSort('name')}
-                    className="flex items-center gap-1 hover:text-foreground"
+                    <button
+                      onClick={() => handleSort('code')}
+                      className="flex items-center gap-1 hover:text-foreground"
+                    >
+                      Code{' '}
+                      {sortColumn === 'code' &&
+                        (sortDirection === 'asc' ? (
+                          <ChevronUp size={14} />
+                        ) : (
+                          <ChevronDown size={14} />
+                        ))}
+                    </button>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3"
+                    aria-sort={
+                      sortColumn === 'name'
+                        ? sortDirection === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : 'none'
+                    }
                   >
-                    Name{' '}
-                    {sortColumn === 'name' &&
-                      (sortDirection === 'asc' ? (
-                        <ChevronUp size={14} />
-                      ) : (
-                        <ChevronDown size={14} />
-                      ))}
-                  </button>
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Department
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Type
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Manufacturer
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Status
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Next Maintenance
-                </th>
-                <th scope="col" className="px-4 py-3 text-right">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {paginatedMachines.map((machine) => (
-                <tr key={machine.id} className="hover:bg-muted/10 transition-colors">
-                  <td className="px-4 py-3 font-mono text-sm font-semibold">{machine.code}</td>
-                  <td className="px-4 py-3 font-medium">{machine.name}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{machine.department}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground capitalize">
-                    {machine.type}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {machine.manufacturer}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={machine.status} />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {formatDate(machine.nextMaintenanceDate)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link href={machineDetailPath(machine.id)}>
-                        <Button variant="ghost" size="sm">
-                          <Eye size={14} />
-                        </Button>
-                      </Link>
-                      {can(user, 'machine:edit') && (
-                        <Link href={machineEditPath(machine.id)}>
+                    <button
+                      onClick={() => handleSort('name')}
+                      className="flex items-center gap-1 hover:text-foreground"
+                    >
+                      Name{' '}
+                      {sortColumn === 'name' &&
+                        (sortDirection === 'asc' ? (
+                          <ChevronUp size={14} />
+                        ) : (
+                          <ChevronDown size={14} />
+                        ))}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Department
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Type
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Manufacturer
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Status
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Next Maintenance
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {paginatedMachines.map((machine) => (
+                  <tr key={machine.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="px-4 py-3 font-mono text-sm font-semibold">{machine.code}</td>
+                    <td className="px-4 py-3 font-medium">{machine.name}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{machine.department}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground capitalize">
+                      {machine.type}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {machine.manufacturer}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={machine.status} />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {formatDate(machine.nextMaintenanceDate)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={machineDetailPath(machine.id)}>
                           <Button variant="ghost" size="sm">
-                            <Edit size={14} />
+                            <Eye size={14} />
                           </Button>
                         </Link>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        }
-        cards={paginatedMachines.map((machine) => (
-          <div key={machine.id} className="bg-card border rounded-lg p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <Link
-                  href={machineDetailPath(machine.id)}
-                  className="font-mono text-sm font-bold text-primary hover:underline"
-                >
-                  {machine.code}
-                </Link>
-                <p className="font-medium mt-1">{machine.name}</p>
+                        {can(user, 'machine:edit') && (
+                          <Link href={machineEditPath(machine.id)}>
+                            <Button variant="ghost" size="sm">
+                              <Edit size={14} />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          }
+          cards={paginatedMachines.map((machine) => (
+            <div key={machine.id} className="bg-card border rounded-lg p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <Link
+                    href={machineDetailPath(machine.id)}
+                    className="font-mono text-sm font-bold text-primary hover:underline"
+                  >
+                    {machine.code}
+                  </Link>
+                  <p className="font-medium mt-1">{machine.name}</p>
+                </div>
+                <StatusBadge status={machine.status} />
               </div>
-              <StatusBadge status={machine.status} />
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-              <div>
-                <span className="text-muted-foreground">Dept:</span>{' '}
-                <span className="font-medium">{machine.department}</span>
+              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                <div>
+                  <span className="text-muted-foreground">Dept:</span>{' '}
+                  <span className="font-medium">{machine.department}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Type:</span>{' '}
+                  <span className="font-medium capitalize">{machine.type}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Manufacturer:</span>{' '}
+                  <span className="font-medium">{machine.manufacturer}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Type:</span>{' '}
-                <span className="font-medium capitalize">{machine.type}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-muted-foreground">Manufacturer:</span>{' '}
-                <span className="font-medium">{machine.manufacturer}</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Link href={machineDetailPath(machine.id)} className="flex-1">
-                <Button variant="outline" size="sm" className="w-full">
-                  <Eye size={14} className="mr-2" /> View
-                </Button>
-              </Link>
-              {can(user, 'machine:edit') && (
-                <Link href={machineEditPath(machine.id)} className="flex-1">
+              <div className="flex gap-2">
+                <Link href={machineDetailPath(machine.id)} className="flex-1">
                   <Button variant="outline" size="sm" className="w-full">
-                    <Edit size={14} className="mr-2" /> Edit
+                    <Eye size={14} className="mr-2" /> View
                   </Button>
                 </Link>
-              )}
+                {can(user, 'machine:edit') && (
+                  <Link href={machineEditPath(machine.id)} className="flex-1">
+                    <Button variant="outline" size="sm" className="w-full">
+                      <Edit size={14} className="mr-2" /> Edit
+                    </Button>
+                  </Link>
+                )}
+              </div>
             </div>
+          ))}
+        />
+
+        {filteredMachines.length === 0 &&
+          (activeFilterCount > 0 ? (
+            <EmptyState
+              title="No machines found"
+              description="No machine matches the current search and filters."
+              action={
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear Filters
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title="No machines registered"
+              description="Get started by adding your first machine to the register."
+              action={
+                can(user, 'machine:add') && (
+                  <Link href={registeredRoutes.machineAdd}>
+                    <Button>
+                      <Plus size={16} className="mr-2" /> Add Machine
+                    </Button>
+                  </Link>
+                )
+              }
+            />
+          ))}
+
+        {totalPages > 1 && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
-        ))}
-      />
-
-      {filteredMachines.length === 0 &&
-        (activeFilterCount > 0 ? (
-          <EmptyState
-            title="No machines found"
-            description="No machine matches the current search and filters."
-            action={
-              <Button variant="outline" onClick={clearFilters}>
-                Clear Filters
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            title="No machines registered"
-            description="Get started by adding your first machine to the register."
-            action={
-              can(user, 'machine:add') && (
-                <Link href={registeredRoutes.machineAdd}>
-                  <Button>
-                    <Plus size={16} className="mr-2" /> Add Machine
-                  </Button>
-                </Link>
-              )
-            }
-          />
-        ))}
-
-      {totalPages > 1 && (
-        <div className="mt-6">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-          />
-        </div>
+        )}
+        </>
       )}
+
     </div>
   );
 }

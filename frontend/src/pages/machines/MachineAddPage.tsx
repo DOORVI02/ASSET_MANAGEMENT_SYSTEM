@@ -1,16 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'wouter';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { PageSection } from '@/components/shared/PageSection';
-import { FeedbackMessage } from '@/components/shared/FeedbackMessage';
 import { ImageUploader } from '@/components/shared/ImageUploader';
 import { Button } from '@/components/ui/button';
 import { MachineForm, type MachineFormSubmitResult } from '@/components/machines/MachineForm';
 import { useAuth } from '@/hooks/use-auth';
+import { useDepartment } from '@/hooks/use-department';
 import { can } from '@/lib/permissions';
-import { mockRepository } from '@/lib/mock-repository';
-import { useMockRepository } from '@/hooks/use-mock-repository';
+import { createMachine, isMachineCodeTaken } from '@/lib/supabase/machines';
 import {
   emptyMachineFormValues,
   formValuesToMachineInput,
@@ -22,23 +22,27 @@ import UnauthorizedPage from '@/pages/UnauthorizedPage';
 export default function MachineAddPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const repository = useMockRepository();
+  const queryClient = useQueryClient();
+  const { available: departments } = useDepartment();
   const [initialValues] = useState<MachineFormValues>(emptyMachineFormValues);
 
-  const departments = useMemo(() => repository.listDepartments(), [repository]);
-
-  // Reads the singleton directly so the check always sees the latest register.
-  const isCodeTaken = useCallback((code: string) => mockRepository.isMachineCodeTaken(code), []);
+  /**
+   * An advisory check that drives the inline "code already used" message while typing. It
+   * is deliberately *not* the thing that prevents a duplicate — `createMachine` relies on
+   * the database's own unique constraint for that, because any check-then-insert has a race
+   * between the two steps that a real concurrent database can lose.
+   */
+  const isCodeTaken = useCallback((code: string) => isMachineCodeTaken(code), []);
 
   if (!can(user, 'machine:add')) {
     return <UnauthorizedPage />;
   }
 
   const handleSubmit = async (values: MachineFormValues): Promise<MachineFormSubmitResult> => {
-    const result = mockRepository.createMachine(
-      formValuesToMachineInput(values),
-      user?.id ?? 'unknown',
-    );
+    // No `performedBy` argument: the audit trigger records `auth.uid()` server-side, so the
+    // actor cannot be chosen by the caller. Passing one from the browser was exactly the
+    // spoofing route the actor-spoofing verification closed.
+    const result = await createMachine(formValuesToMachineInput(values));
 
     if (!result.ok) {
       return {
@@ -48,6 +52,9 @@ export default function MachineAddPage() {
       };
     }
 
+    // Invalidates by prefix, so every scope and department variant of the machine list
+    // refetches — not just the one this page happens to know about.
+    await queryClient.invalidateQueries({ queryKey: ['machines'] });
     setLocation(machineDetailPath(result.data.id));
     return { ok: true };
   };
@@ -65,15 +72,6 @@ export default function MachineAddPage() {
         description="Register a new machine in the plant asset register."
       />
 
-      <FeedbackMessage
-        feedback={{
-          state: 'validation',
-          title: 'Preview mode — data is not persisted',
-          description:
-            'This machine is saved to the in-memory preview store and resets on page reload. Supabase persistence arrives in a later phase.',
-        }}
-      />
-
       <MachineForm
         mode="create"
         initialValues={initialValues}
@@ -84,11 +82,11 @@ export default function MachineAddPage() {
         imageSection={
           <PageSection
             title="Machine image"
-            description="Preview-only uploader. Nothing is sent to Cloudinary during the frontend phase."
+            description="An image can be attached once the machine exists and has an id to attach it to."
           >
             <ImageUploader />
             <p className="mt-3 text-xs text-muted-foreground">
-              Images can be attached from the machine&apos;s Images tab once it has been created.
+              Images are added from the machine&apos;s Images tab after it has been created.
             </p>
           </PageSection>
         }
