@@ -73,7 +73,14 @@ export default function ResetPasswordPage() {
   const [isDone, setIsDone] = useState(false);
 
   useEffect(() => {
-    if (screenState !== 'checking') return;
+    // `missing` is probed too, not just `checking`. supabase-js consumes the recovery
+    // fragment and strips it from the URL as soon as the client is constructed, so a
+    // slightly different mount order — or a reload after the token was already exchanged —
+    // leaves a perfectly good recovery session behind an address bar with no parameters at
+    // all. Declaring "no recovery link" from the URL alone would then lock the user out of
+    // a session they legitimately hold. An explicit error in the URL is never re-probed:
+    // that is Supabase's own verdict, and no session can override it.
+    if (screenState !== 'checking' && screenState !== 'missing') return;
 
     const client = getSupabaseClient();
     let settled = false;
@@ -98,9 +105,10 @@ export default function ResetPasswordPage() {
 
     // If neither produced a session, the link carried something that didn't work. Reporting
     // that is better than leaving a spinner up forever, which is what an unbounded wait on
-    // an event that will never fire would do.
+    // an event that will never fire would do. A URL with no recovery parameters at all keeps
+    // its own "no link" message rather than being relabelled as a failure.
     const timeout = window.setTimeout(() => {
-      if (!settled) setScreenState('failed');
+      if (!settled) setScreenState((previous) => (previous === 'missing' ? 'missing' : 'failed'));
     }, 8000);
 
     return () => {
